@@ -51,7 +51,6 @@ import {
   getCacheStats,
 } from "../controllers/streamController";
 import { checkServerCache } from "../controllers/downloadsController";
-import { getProxy, setProxy, testProxy } from "../controllers/proxyController";
 import { adminAuth } from "../middleware/adminAuth";
 import {
   listDefaultChannels,
@@ -227,11 +226,6 @@ router.post("/contact", authenticate, sendMessage);
 
 // ── Downloads ───────────────────────────────────────────────────
 router.get("/downloads/check/:fileId", authenticate, checkServerCache);
-
-// ── Proxy ───────────────────────────────────────────────────────
-router.get("/proxy", authenticate, getProxy);
-router.post("/proxy", authenticate, setProxy);
-router.post("/proxy/test", authenticate, testProxy);
 
 // Bot
 router.post("/bot/connect/generate", authenticate, generateCode);

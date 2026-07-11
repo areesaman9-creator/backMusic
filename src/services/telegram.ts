@@ -8,15 +8,6 @@ const API_ID = parseInt(process.env.TELEGRAM_API_ID as string, 10);
 const API_HASH = process.env.TELEGRAM_API_HASH as string;
 const SESSION_STRING = process.env.TELEGRAM_SESSION_STRING as string;
 
-interface ProxySettings {
-  type: "http" | "socks5" | "mtproto" | "none";
-  host: string;
-  port: number;
-  username?: string;
-  password?: string;
-  secret?: string;
-}
-
 export interface AudioFile {
   messageId: number;
   title: string;
@@ -37,93 +28,14 @@ export interface StreamDownloadHandle {
 
 class TelegramService {
   private client: TelegramClient | null = null;
-  private currentProxyConfig: ProxySettings | null = null;
-
-  private async getProxySettings(userId: any): Promise<ProxySettings | null> {
-    try {
-      const db = mongoose.connection.db;
-      const user = await db
-        .collection("users")
-        .findOne(
-          { _id: new mongoose.Types.ObjectId(userId.toString()) },
-          { projection: { proxy: 1 } },
-        );
-      return user?.proxy ?? null;
-    } catch (error) {
-      console.error("Error fetching proxy settings:", error);
-      return null;
-    }
-  }
-
-  private createProxyConfig(settings: ProxySettings): any {
-    if (settings.type === "http") {
-      const auth = settings.username
-        ? `${settings.username}:${settings.password}@`
-        : "";
-      return {
-        type: "http",
-        url: `http://${auth}${settings.host}:${settings.port}`,
-      };
-    } else if (settings.type === "socks5") {
-      return {
-        socksType: 5,
-        ip: settings.host,
-        port: settings.port,
-        username: settings.username || undefined,
-        password: settings.password || undefined,
-      };
-    } else if (settings.type === "mtproto") {
-      return {
-        ip: settings.host,
-        port: settings.port,
-        MTProxy: true,
-        secret: settings.secret,
-      };
-    }
-    return null;
-  }
-
-  private hasProxyChanged(newSettings: ProxySettings | null): boolean {
-    return (
-      JSON.stringify(this.currentProxyConfig) !== JSON.stringify(newSettings)
-    );
-  }
-
-  async initialize(userId?: any): Promise<TelegramClient> {
-    const proxySettings = userId ? await this.getProxySettings(userId) : null;
-
-    if (this.client && !this.hasProxyChanged(proxySettings)) {
-      return this.client;
-    }
-
-    if (this.client) {
-      try {
-        await this.client.disconnect();
-      } catch {}
-      this.client = null;
-    }
+  async initialize(_userId?: any): Promise<TelegramClient> {
+    if (this.client) return this.client;
 
     const session = new StringSession(SESSION_STRING);
-    const clientOptions: any = { connectionRetries: 5, useWSS: false };
-
-    if (proxySettings && proxySettings.type !== "none") {
-      const proxyConfig = this.createProxyConfig(proxySettings);
-      if (proxyConfig) {
-        if (proxySettings.type === "http") {
-          try {
-            const { HttpsProxyAgent } = require("https-proxy-agent");
-            clientOptions.agent = new HttpsProxyAgent(proxyConfig.url);
-          } catch (e) {
-            console.warn("https-proxy-agent not available");
-          }
-        } else {
-          clientOptions.proxy = proxyConfig;
-        }
-      }
-    }
-
-    this.client = new TelegramClient(session, API_ID, API_HASH, clientOptions);
-    this.currentProxyConfig = proxySettings;
+    this.client = new TelegramClient(session, API_ID, API_HASH, {
+      connectionRetries: 5,
+      useWSS: false,
+    });
     await this.client.connect();
     return this.client;
   }
@@ -453,13 +365,12 @@ class TelegramService {
     }
   }
 
-  async disconnect(): Promise<void> {
+   async disconnect(): Promise<void> {
     if (this.client) {
       try {
         await this.client.disconnect();
       } catch {}
       this.client = null;
-      this.currentProxyConfig = null;
     }
   }
 }
