@@ -172,13 +172,12 @@ export const getSongById = async (
         .status(404)
         .json({ success: false, message: "Song not found" });
 
-    const owns = await db.collection("telegram_channels").findOne(
-      {
-        _id: new mongoose.Types.ObjectId(song.channelDbId),
-        userId,
-      },
-      { projection: { _id: 1 } },
-    );
+    const owns = await db
+      .collection("user_channels")
+      .findOne(
+        { userId, channelUsername: song.channelUsername },
+        { projection: { _id: 1 } },
+      );
     if (!owns)
       return res
         .status(404)

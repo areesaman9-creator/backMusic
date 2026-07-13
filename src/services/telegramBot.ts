@@ -94,14 +94,15 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
       );
     }
 
+    const authText = isNew
+      ? `🎵 *Welcome to Tel Player!*\n\nYour account has been created successfully.`
+      : `✅ *Authentication Successful*\n\nWelcome back to Tel Player.`;
+
     await bot.sendMessage(
       chatId,
-      isNew
-        ? `🎵 *Welcome to Tel Player!*\n\nYour account has been created successfully.`
-        : `✅ *Authentication Successful*\n\nWelcome back to Tel Player.`,
-      { parse_mode: "Markdown" },
+      `${authText}\n\n🎧 *Tel Player*\n\nWhat would you like to do?`,
+      { parse_mode: "Markdown", reply_markup: mainMenuKeyboard() },
     );
-    await sendMainMenu(chatId);
   } catch (err) {
     console.error("Telegram auth failed:", err.response?.data || err.message);
     await bot.sendMessage(

@@ -14,12 +14,12 @@ export const getPlaylists = async (
     const playlists = await db
       .collection("user_playlists")
       .aggregate([
-        { $match: { userId } },
+        { $match: { userIds: userId } },
         { $sort: { updatedAt: -1 } },
-        // always derive songsCount from the actual array — never trust the stored field
         {
           $addFields: {
             songsCount: { $size: { $ifNull: ["$songIds", []] } },
+            isOwner: { $eq: ["$ownerId", userId] },
           },
         },
       ])
@@ -39,7 +39,7 @@ export const createPlaylist = async (
 ) => {
   try {
     const userId = (req as any).user.id.toString();
-    const { name, description } = req.body;
+    const { name } = req.body;
     if (!name)
       return res.status(400).json({ success: false, msg: "name required" });
 
@@ -47,18 +47,18 @@ export const createPlaylist = async (
 
     const existing = await db
       .collection("user_playlists")
-      .findOne({ userId, name });
+      .findOne({ userIds: userId, name });
     if (existing)
       return res
         .status(400)
         .json({ success: false, msg: "Playlist name already exists" });
 
     const newPlaylist = {
-      userId,
+      ownerId: userId,
+      userIds: [userId],
       name,
-      description: description || null,
       coverImage: null,
-      songIds: [], // ← source of truth; songsCount derived from this
+      songIds: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -67,7 +67,12 @@ export const createPlaylist = async (
     res.status(201).json({
       success: true,
       msg: "Playlist created",
-      data: { _id: result.insertedId, ...newPlaylist, songsCount: 0 },
+      data: {
+        _id: result.insertedId,
+        ...newPlaylist,
+        songsCount: 0,
+        isOwner: true,
+      },
     });
   } catch (error) {
     next(error);
@@ -75,6 +80,7 @@ export const createPlaylist = async (
 };
 
 // ── PUT /api/playlists/:id ─────────────────────────────────────
+// Owner-only: rename the playlist.
 export const updatePlaylist = async (
   req: Request,
   res: Response,
@@ -83,39 +89,43 @@ export const updatePlaylist = async (
   try {
     const userId = (req as any).user.id.toString();
     const playlistId = req.params.id;
-    const { name, description } = req.body;
+    const { name } = req.body;
 
     if (!name || !name.toString().trim())
       return res.status(400).json({ success: false, msg: "name required" });
 
     const db = mongoose.connection.db;
     const trimmedName = name.toString().trim();
+    const objId = new mongoose.Types.ObjectId(playlistId);
+
+    const playlist = await db
+      .collection("user_playlists")
+      .findOne({ _id: objId });
+    if (!playlist)
+      return res
+        .status(404)
+        .json({ success: false, msg: "Playlist not found" });
+    if (playlist.ownerId !== userId)
+      return res
+        .status(403)
+        .json({ success: false, msg: "Only the playlist owner can rename it" });
 
     const existing = await db.collection("user_playlists").findOne({
-      userId,
+      userIds: userId,
       name: trimmedName,
-      _id: { $ne: new mongoose.Types.ObjectId(playlistId) },
+      _id: { $ne: objId },
     });
     if (existing)
       return res
         .status(400)
         .json({ success: false, msg: "Playlist name already exists" });
 
-    const result = await db.collection("user_playlists").updateOne(
-      { _id: new mongoose.Types.ObjectId(playlistId), userId },
-      {
-        $set: {
-          name: trimmedName,
-          ...(description !== undefined ? { description } : {}),
-          updatedAt: new Date(),
-        },
-      },
-    );
-
-    if (result.matchedCount === 0)
-      return res
-        .status(404)
-        .json({ success: false, msg: "Playlist not found" });
+    await db
+      .collection("user_playlists")
+      .updateOne(
+        { _id: objId },
+        { $set: { name: trimmedName, updatedAt: new Date() } },
+      );
 
     res.json({ success: true, msg: "Playlist updated" });
   } catch (error) {
@@ -124,6 +134,7 @@ export const updatePlaylist = async (
 };
 
 // ── DELETE /api/playlists/:id ──────────────────────────────────
+// Owner-only: delete the playlist entirely.
 export const deletePlaylist = async (
   req: Request,
   res: Response,
@@ -136,7 +147,7 @@ export const deletePlaylist = async (
 
     const result = await db.collection("user_playlists").deleteOne({
       _id: new mongoose.Types.ObjectId(playlistId),
-      userId,
+      ownerId: userId,
     });
 
     if (result.deletedCount === 0)
@@ -166,7 +177,7 @@ export const getPlaylistSongs = async (
 
     const playlist = await db.collection("user_playlists").findOne({
       _id: new mongoose.Types.ObjectId(playlistId),
-      userId,
+      userIds: userId,
     });
     if (!playlist)
       return res
@@ -174,7 +185,7 @@ export const getPlaylistSongs = async (
         .json({ success: false, msg: "Playlist not found" });
 
     const songIds = playlist.songIds ?? [];
-    const realCount = songIds.length; // ← always accurate
+    const realCount = songIds.length;
     const skip = (pageNum - 1) * limitNum;
     const pageIds = songIds.slice(skip, skip + limitNum);
 
@@ -188,7 +199,8 @@ export const getPlaylistSongs = async (
       })
       .filter(Boolean);
 
-    // fetch from both regular songs and bot songs
+    // NOTE: bot_songs متعلق به کسیه که در بات‌اش فرستاده (owner) نه هر عضوی که
+    // داره playlist رو می‌بینه — پس اینجا باید با ownerId فیلتر بشه، نه userId درخواست‌دهنده.
     const [songs, botSongs] = await Promise.all([
       db
         .collection("songs")
@@ -196,13 +208,12 @@ export const getPlaylistSongs = async (
         .toArray(),
       db
         .collection("bot_songs")
-        .find({ _id: { $in: objIds }, userId })
+        .find({ _id: { $in: objIds }, userId: playlist.ownerId })
         .toArray(),
     ]);
 
     const songMap = new Map(songs.map((s) => [s._id.toString(), s]));
 
-    // normalize bot_songs to look like regular song docs
     for (const bs of botSongs) {
       songMap.set(bs._id.toString(), {
         _id: bs._id,
@@ -229,7 +240,8 @@ export const getPlaylistSongs = async (
       playlist: {
         _id: playlist._id,
         name: playlist.name,
-        songsCount: realCount, // ← derived, never stale
+        songsCount: realCount,
+        isOwner: playlist.ownerId === userId,
       },
       total: realCount,
       page: pageNum,
@@ -242,6 +254,7 @@ export const getPlaylistSongs = async (
 };
 
 // ── POST /api/playlists/:id/songs ──────────────────────────────
+// هر عضوی (owner یا collaborator) اجازه‌ی اضافه کردن آهنگ داره.
 export const addSongToPlaylist = async (
   req: Request,
   res: Response,
@@ -259,21 +272,19 @@ export const addSongToPlaylist = async (
     const result = await db.collection("user_playlists").updateOne(
       {
         _id: new mongoose.Types.ObjectId(playlistId),
-        userId,
-        songIds: { $ne: songId }, // only add if not already present
+        userIds: userId,
+        songIds: { $ne: songId },
       },
       {
         $push: { songIds: songId } as any,
         $set: { updatedAt: new Date() },
-        // songsCount intentionally NOT updated — derived from songIds.length
       },
     );
 
     if (result.matchedCount === 0) {
-      // either not found or already contains the song
       const exists = await db.collection("user_playlists").findOne({
         _id: new mongoose.Types.ObjectId(playlistId),
-        userId,
+        userIds: userId,
       });
       if (!exists)
         return res
@@ -302,7 +313,7 @@ export const removeSongFromPlaylist = async (
     const db = mongoose.connection.db;
 
     const result = await db.collection("user_playlists").updateOne(
-      { _id: new mongoose.Types.ObjectId(playlistId), userId },
+      { _id: new mongoose.Types.ObjectId(playlistId), userIds: userId },
       {
         $pull: { songIds: songId } as any,
         $set: { updatedAt: new Date() },
@@ -341,7 +352,7 @@ export const reorderPlaylist = async (
     const result = await db
       .collection("user_playlists")
       .updateOne(
-        { _id: new mongoose.Types.ObjectId(playlistId), userId },
+        { _id: new mongoose.Types.ObjectId(playlistId), userIds: userId },
         { $set: { songIds, updatedAt: new Date() } },
       );
 
@@ -352,6 +363,211 @@ export const reorderPlaylist = async (
     }
 
     res.json({ success: true, msg: "Playlist reordered" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── GET /api/playlists/:id/users ────────────────────────────────
+// Lists everyone who currently has access to this playlist.
+export const getPlaylistUsers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req as any).user.id.toString();
+    const playlistId = req.params.id;
+    const db = mongoose.connection.db;
+
+    const playlist = await db.collection("user_playlists").findOne({
+      _id: new mongoose.Types.ObjectId(playlistId),
+      userIds: userId,
+    });
+    if (!playlist)
+      return res
+        .status(404)
+        .json({ success: false, msg: "Playlist not found" });
+
+    const objIds = (playlist.userIds as string[])
+      .map((id) => {
+        try {
+          return new mongoose.Types.ObjectId(id);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean) as mongoose.Types.ObjectId[];
+
+    const users = await db
+      .collection("users")
+      .find({ _id: { $in: objIds } })
+      .project({ name: 1, telegramUsername: 1, telegramId: 1 })
+      .toArray();
+
+    const data = users.map((u: any) => ({
+      _id: u._id.toString(),
+      name: u.name,
+      telegramUsername: u.telegramUsername,
+      telegramId: u.telegramId,
+      isOwner: u._id.toString() === playlist.ownerId,
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── POST /api/playlists/:id/users ───────────────────────────────
+// Owner-only: grant another app user access to add/remove songs.
+export const addUserToPlaylist = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req as any).user.id.toString();
+    const playlistId = req.params.id;
+    const { telegramId } = req.body;
+
+    if (!telegramId) {
+      return res.status(400).json({
+        success: false,
+        msg: "telegramId required",
+      });
+    }
+
+    const db = mongoose.connection.db;
+    const objId = new mongoose.Types.ObjectId(playlistId);
+
+    const playlist = await db
+      .collection("user_playlists")
+      .findOne({ _id: objId });
+    if (!playlist)
+      return res
+        .status(404)
+        .json({ success: false, msg: "Playlist not found" });
+    if (playlist.ownerId !== userId)
+      return res
+        .status(403)
+        .json({ success: false, msg: "Only the playlist owner can add users" });
+
+    const query: any = { telegramId: telegramId.toString() };
+
+    const targetUser = await db.collection("users").findOne(query);
+    if (!targetUser)
+      return res.status(404).json({ success: false, msg: "User not found" });
+
+    const targetId = targetUser._id.toString();
+    if ((playlist.userIds as string[]).includes(targetId)) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "User already has access" });
+    }
+
+    await db
+      .collection("user_playlists")
+      .updateOne(
+        { _id: objId },
+        { $addToSet: { userIds: targetId }, $set: { updatedAt: new Date() } },
+      );
+
+    res.json({
+      success: true,
+      msg: "User added",
+      data: {
+        _id: targetId,
+        name: targetUser.name,
+        telegramUsername: targetUser.telegramUsername,
+        telegramId: targetUser.telegramId,
+        isOwner: false,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── DELETE /api/playlists/:id/users/:targetUserId ───────────────
+// Owner-only: revoke another user's access. The owner cannot remove themself.
+export const removeUserFromPlaylist = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req as any).user.id.toString();
+    const { id: playlistId, targetUserId } = req.params;
+    const db = mongoose.connection.db;
+    const objId = new mongoose.Types.ObjectId(playlistId);
+
+    const playlist = await db
+      .collection("user_playlists")
+      .findOne({ _id: objId });
+    if (!playlist)
+      return res
+        .status(404)
+        .json({ success: false, msg: "Playlist not found" });
+    if (playlist.ownerId !== userId)
+      return res.status(403).json({
+        success: false,
+        msg: "Only the playlist owner can remove users",
+      });
+    if (targetUserId === playlist.ownerId)
+      return res
+        .status(400)
+        .json({ success: false, msg: "Cannot remove the owner" });
+
+    await db.collection("user_playlists").updateOne(
+      { _id: objId },
+      {
+        $pull: { userIds: targetUserId } as any,
+        $set: { updatedAt: new Date() },
+      },
+    );
+
+    res.json({ success: true, msg: "User removed" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── GET /api/users/search?q=... ──────────────────────────────────
+// Used by the "Add User" picker when sharing a playlist.
+export const searchUsers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req as any).user.id.toString();
+    const q = ((req.query.q as string) || "").trim();
+    if (q.length < 2) return res.json({ success: true, data: [] });
+
+    const db = mongoose.connection.db;
+    const cleanQuery = q.replace("@", "");
+
+    const users = await db
+      .collection("users")
+      .find({
+        _id: { $ne: new mongoose.Types.ObjectId(userId) },
+        isActive: true,
+        telegramId: { $regex: cleanQuery, $options: "i" },
+      })
+      .project({ name: 1, telegramUsername: 1, telegramId: 1 })
+      .limit(20)
+      .toArray();
+
+    res.json({
+      success: true,
+      data: users.map((u: any) => ({
+        _id: u._id.toString(),
+        name: u.name,
+        telegramUsername: u.telegramUsername,
+        telegramId: u.telegramId,
+      })),
+    });
   } catch (error) {
     next(error);
   }

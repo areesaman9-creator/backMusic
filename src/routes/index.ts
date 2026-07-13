@@ -42,6 +42,10 @@ import {
   removeSongFromPlaylist,
   reorderPlaylist,
   updatePlaylist,
+  getPlaylistUsers,
+  addUserToPlaylist,
+  removeUserFromPlaylist,
+  searchUsers,
 } from "../controllers/playlistsController";
 import {
   streamSong,
@@ -208,6 +212,10 @@ router.delete(
   removeSongFromPlaylist,
 );
 router.post("/playlists/:id/reorder", authenticate, reorderPlaylist);
+router.get("/playlists/:id/users", authenticate, getPlaylistUsers);
+router.post("/playlists/:id/users", authenticate, requirePremium, addUserToPlaylist);
+router.delete("/playlists/:id/users/:targetUserId", authenticate, removeUserFromPlaylist);
+router.get("/users/search", authenticate, searchUsers);
 
 // ── Stream ──────────────────────────────────────────────────────
 router.get("/stream/check/:fileId", authenticate, checkDiskCache);

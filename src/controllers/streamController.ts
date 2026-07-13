@@ -276,7 +276,10 @@ export const streamSong = async (
       if (!clientGone) res.end();
       _upgradeArtworkFromId3(
         cachePath,
-        { channelUsername: channelUsername.replace("@", ""), messageId: parseInt(messageId) },
+        {
+          channelUsername: channelUsername.replace("@", ""),
+          messageId: parseInt(messageId),
+        },
         "songs",
         db,
       ).catch(() => {});
@@ -386,7 +389,7 @@ export const issueStreamToken = async (
     const db = mongoose.connection.db;
 
     const song = await db
-      .collection("telegram_songs")
+      .collection("songs")
       .findOne({ _id: new mongoose.Types.ObjectId(songId) });
 
     if (!song) {
@@ -456,7 +459,7 @@ async function _downloadThumbnailBg(
 ): Promise<void> {
   try {
     const song = await db
-      .collection("telegram_songs")
+      .collection("songs")
       .findOne({ _id: new mongoose.Types.ObjectId(songId) });
 
     if (!song || (song.thumbnail && song.thumbnail !== devNull)) return;
@@ -468,7 +471,7 @@ async function _downloadThumbnailBg(
     );
 
     await db
-      .collection("telegram_songs")
+      .collection("songs")
       .updateOne(
         { _id: new mongoose.Types.ObjectId(songId) },
         { $set: { thumbnail: thumbnail || null } },
@@ -502,4 +505,3 @@ async function _upgradeArtworkFromId3(
     console.error("_upgradeArtworkFromId3 failed:", err);
   }
 }
-
