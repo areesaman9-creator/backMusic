@@ -26,9 +26,21 @@ export interface ForwarderJob {
 
 const jobs = new Map<string, ForwarderJob>();
 const cancelFlags = new Map<string, boolean>();
+const MAX_JOBS_IN_MEMORY = 50;
 
 function jobId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function pruneOldJobs() {
+  if (jobs.size <= MAX_JOBS_IN_MEMORY) return;
+  const finished = Array.from(jobs.values())
+    .filter((j) => j.status !== "running")
+    .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
+  const toRemove = jobs.size - MAX_JOBS_IN_MEMORY;
+  for (let i = 0; i < Math.min(toRemove, finished.length); i++) {
+    jobs.delete(finished[i].id);
+  }
 }
 
 function isAudio(doc: any): boolean {
@@ -70,9 +82,12 @@ async function runForwarder(job: ForwarderJob): Promise<void> {
 
       let audioMessages: any[] = [];
       try {
-        for await (const msg of client.iterMessages(channel, { limit: undefined } as any)) {
+        for await (const msg of client.iterMessages(channel, {
+          limit: undefined,
+        } as any)) {
           if (cancelFlags.get(job.id)) break;
-          if (!msg.media || msg.media.className !== "MessageMediaDocument") continue;
+          if (!msg.media || msg.media.className !== "MessageMediaDocument")
+            continue;
           const doc = (msg.media as any).document;
           if (doc && isAudio(doc)) {
             audioMessages.push(msg);
@@ -98,7 +113,10 @@ async function runForwarder(job: ForwarderJob): Promise<void> {
         let fileName = "Unknown";
         if (doc) {
           for (const attr of doc.attributes || []) {
-            if (attr.className === "DocumentAttributeFilename" && attr.fileName) {
+            if (
+              attr.className === "DocumentAttributeFilename" &&
+              attr.fileName
+            ) {
               fileName = attr.fileName;
               break;
             }
@@ -170,7 +188,7 @@ async function runForwarder(job: ForwarderJob): Promise<void> {
 export const startForwarder = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { targetChannel, sourceChannels } = req.body as {
@@ -178,7 +196,11 @@ export const startForwarder = async (
       sourceChannels: string[];
     };
 
-    if (!targetChannel || !Array.isArray(sourceChannels) || sourceChannels.length === 0) {
+    if (
+      !targetChannel ||
+      !Array.isArray(sourceChannels) ||
+      sourceChannels.length === 0
+    ) {
       return res.status(400).json({
         success: false,
         msg: "targetChannel and sourceChannels[] required",
@@ -201,6 +223,7 @@ export const startForwarder = async (
     };
 
     jobs.set(id, job);
+    pruneOldJobs();
     cancelFlags.set(id, false);
 
     // fire and forget
@@ -220,7 +243,7 @@ export const startForwarder = async (
 export const getForwarderStatus = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { jobId: id } = req.params;
@@ -257,7 +280,7 @@ export const getForwarderStatus = async (
 export const cancelForwarder = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const { jobId: id } = req.params;
@@ -279,7 +302,7 @@ export const cancelForwarder = async (
 export const listForwarderJobs = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const list = Array.from(jobs.values())

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
+import { signThumbnailUrl } from "../utils/thumbnailToken";
 
 // ── GET /api/playlists ─────────────────────────────────────────
 export const getPlaylists = async (
@@ -80,7 +81,6 @@ export const createPlaylist = async (
 };
 
 // ── PUT /api/playlists/:id ─────────────────────────────────────
-// Owner-only: rename the playlist.
 export const updatePlaylist = async (
   req: Request,
   res: Response,
@@ -134,7 +134,6 @@ export const updatePlaylist = async (
 };
 
 // ── DELETE /api/playlists/:id ──────────────────────────────────
-// Owner-only: delete the playlist entirely.
 export const deletePlaylist = async (
   req: Request,
   res: Response,
@@ -145,17 +144,43 @@ export const deletePlaylist = async (
     const playlistId = req.params.id;
     const db = mongoose.connection.db;
 
-    const result = await db.collection("user_playlists").deleteOne({
-      _id: new mongoose.Types.ObjectId(playlistId),
-      ownerId: userId,
-    });
+    let objId: mongoose.Types.ObjectId;
+    try {
+      objId = new mongoose.Types.ObjectId(playlistId);
+    } catch {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Invalid playlist id" });
+    }
 
-    if (result.deletedCount === 0)
+    const playlist = await db
+      .collection("user_playlists")
+      .findOne({ _id: objId });
+    if (!playlist)
       return res
         .status(404)
         .json({ success: false, msg: "Playlist not found" });
 
-    res.json({ success: true, msg: "Playlist deleted" });
+    if (playlist.ownerId === userId) {
+      await db.collection("user_playlists").deleteOne({ _id: objId });
+      return res.json({ success: true, msg: "Playlist deleted" });
+    }
+
+    if (!(playlist.userIds as string[]).includes(userId)) {
+      return res
+        .status(404)
+        .json({ success: false, msg: "Playlist not found" });
+    }
+
+    await db.collection("user_playlists").updateOne(
+      { _id: objId },
+      {
+        $pull: { userIds: userId } as any,
+        $set: { updatedAt: new Date() },
+      },
+    );
+
+    res.json({ success: true, msg: "Left playlist" });
   } catch (error) {
     next(error);
   }
@@ -199,16 +224,36 @@ export const getPlaylistSongs = async (
       })
       .filter(Boolean);
 
-    // NOTE: bot_songs متعلق به کسیه که در بات‌اش فرستاده (owner) نه هر عضوی که
-    // داره playlist رو می‌بینه — پس اینجا باید با ownerId فیلتر بشه، نه userId درخواست‌دهنده.
     const [songs, botSongs] = await Promise.all([
       db
         .collection("songs")
-        .find({ _id: { $in: objIds } })
+        .aggregate([
+          { $match: { _id: { $in: objIds } } },
+          {
+            $addFields: {
+              thumbnail: {
+                $cond: [
+                  {
+                    $gt: [
+                      { $strLenBytes: { $ifNull: ["$thumbnail", ""] } },
+                      300000,
+                    ],
+                  },
+                  null,
+                  "$thumbnail",
+                ],
+              },
+            },
+          },
+          { $project: { searchWords: 0, searchPrefixes: 0 } },
+        ])
         .toArray(),
       db
         .collection("bot_songs")
-        .find({ _id: { $in: objIds }, userId: playlist.ownerId })
+        .find(
+          { _id: { $in: objIds }, userId: playlist.ownerId },
+          { projection: { searchWords: 0, searchPrefixes: 0 } },
+        )
         .toArray(),
     ]);
 
@@ -232,7 +277,11 @@ export const getPlaylistSongs = async (
 
     const ordered = pageIds
       .map((id: string) => songMap.get(id))
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((s: any) => ({
+        ...s,
+        thumbnail: signThumbnailUrl(s._id.toString()),
+      }));
 
     res.json({
       success: true,
@@ -254,7 +303,6 @@ export const getPlaylistSongs = async (
 };
 
 // ── POST /api/playlists/:id/songs ──────────────────────────────
-// هر عضوی (owner یا collaborator) اجازه‌ی اضافه کردن آهنگ داره.
 export const addSongToPlaylist = async (
   req: Request,
   res: Response,
@@ -369,7 +417,6 @@ export const reorderPlaylist = async (
 };
 
 // ── GET /api/playlists/:id/users ────────────────────────────────
-// Lists everyone who currently has access to this playlist.
 export const getPlaylistUsers = async (
   req: Request,
   res: Response,
@@ -420,7 +467,6 @@ export const getPlaylistUsers = async (
 };
 
 // ── POST /api/playlists/:id/users ───────────────────────────────
-// Owner-only: grant another app user access to add/remove songs.
 export const addUserToPlaylist = async (
   req: Request,
   res: Response,
@@ -490,7 +536,6 @@ export const addUserToPlaylist = async (
 };
 
 // ── DELETE /api/playlists/:id/users/:targetUserId ───────────────
-// Owner-only: revoke another user's access. The owner cannot remove themself.
 export const removeUserFromPlaylist = async (
   req: Request,
   res: Response,
@@ -534,7 +579,6 @@ export const removeUserFromPlaylist = async (
 };
 
 // ── GET /api/users/search?q=... ──────────────────────────────────
-// Used by the "Add User" picker when sharing a playlist.
 export const searchUsers = async (
   req: Request,
   res: Response,

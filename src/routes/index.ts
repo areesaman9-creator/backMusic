@@ -28,6 +28,7 @@ import {
   getSongById,
   getSongs,
   getSongsByIds,
+  getSongThumbnail,
 } from "../controllers/songsController";
 import {
   getFavorites,
@@ -47,14 +48,7 @@ import {
   removeUserFromPlaylist,
   searchUsers,
 } from "../controllers/playlistsController";
-import {
-  streamSong,
-  streamByToken,
-  checkDiskCache,
-  issueStreamToken,
-  getCacheStats,
-} from "../controllers/streamController";
-import { checkServerCache } from "../controllers/downloadsController";
+import { streamSong } from "../controllers/streamController";
 import { adminAuth } from "../middleware/adminAuth";
 import {
   listDefaultChannels,
@@ -89,15 +83,16 @@ import {
   recordPlay,
 } from "../controllers/playHistoryController";
 import { requirePremium } from "../middleware/requirePremium";
+import { authLimiter } from "../middleware/rateLimiters";
 
 const router = Router();
 
 // ── Auth ────────────────────────────────────────────────────────
-router.post("/auth/refresh", refreshToken);
+router.post("/auth/refresh", authLimiter, refreshToken);
 router.get("/auth/me", authenticate, getMe);
-router.post("/auth/telegram", telegramAuth);
-router.get("/auth/telegram/poll/:sessionId", pollTelegramAuth);
-router.post("/auth/telegram/session", createTelegramSession);
+router.post("/auth/telegram", authLimiter, telegramAuth);
+router.get("/auth/telegram/poll/:sessionId", pollTelegramAuth); 
+router.post("/auth/telegram/session", authLimiter, createTelegramSession);
 
 router.put(
   "/auth/profile",
@@ -188,6 +183,7 @@ router.post(
 // ── Songs ───────────────────────────────────────────────────────
 router.get("/songs", authenticate, getSongs);
 router.get("/songs/by-ids", authenticate, getSongsByIds);
+router.get("/songs/:id/thumbnail", getSongThumbnail);
 router.get("/songs/:id", authenticate, getSongById);
 
 // ── Favorites ───────────────────────────────────────────────────
@@ -218,11 +214,7 @@ router.delete("/playlists/:id/users/:targetUserId", authenticate, removeUserFrom
 router.get("/users/search", authenticate, searchUsers);
 
 // ── Stream ──────────────────────────────────────────────────────
-router.get("/stream/check/:fileId", authenticate, checkDiskCache);
-router.get("/stream/token/:songId", authenticate, issueStreamToken);
-router.get("/stream/admin/stats", authenticate, getCacheStats);
 router.post("/stream", authenticate, requirePremium, streamSong);
-router.get("/stream/:token", streamByToken);
 
 // ── play-history ──────────────────────────────────────────────────────
 router.post("/play-history", authenticate, recordPlay);
@@ -231,9 +223,6 @@ router.get("/play-history/recent", authenticate, getRecentlyPlayed);
 
 // ── Contact ─────────────────────────────────────────────────────
 router.post("/contact", authenticate, sendMessage);
-
-// ── Downloads ───────────────────────────────────────────────────
-router.get("/downloads/check/:fileId", authenticate, checkServerCache);
 
 // Bot
 router.post("/bot/connect/generate", authenticate, generateCode);

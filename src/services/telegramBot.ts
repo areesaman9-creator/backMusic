@@ -20,6 +20,16 @@ const pendingConnections = new Map<
   { userId: string; expiresAt: Date }
 >();
 
+setInterval(
+  () => {
+    const now = new Date();
+    for (const [code, data] of pendingConnections.entries()) {
+      if (now > data.expiresAt) pendingConnections.delete(code);
+    }
+  },
+  5 * 60 * 1000,
+);
+
 // ── Update de-duplication ────────────────────────────────────────
 const _recentlyHandled = new Set<string>();
 function isDuplicateUpdate(key: string): boolean {
@@ -302,33 +312,6 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
   const mimeType =
     msg.audio?.mime_type || (audio as any).mime_type || "audio/mpeg";
 
-  // دانلود thumbnail — اگه audio.thumb داشت
-  let thumbnail: string | null = null;
-  const thumb = (msg.audio as any)?.thumb || (msg.document as any)?.thumb;
-
-  if (thumb?.file_id) {
-    try {
-      const fileLink = await bot.getFileLink(thumb.file_id);
-      const https = require("https");
-      const chunks: Buffer[] = [];
-
-      await new Promise<void>((resolve, reject) => {
-        https
-          .get(fileLink, (res: any) => {
-            res.on("data", (chunk: Buffer) => chunks.push(chunk));
-            res.on("end", resolve);
-            res.on("error", reject);
-          })
-          .on("error", reject);
-      });
-
-      const buffer = Buffer.concat(chunks);
-      thumbnail = `data:image/jpeg;base64,${buffer.toString("base64")}`;
-    } catch (e: any) {
-      console.warn("Failed to download thumbnail:", e.message);
-    }
-  }
-
   await db.collection("bot_songs").insertOne({
     userId: connection.userId,
     telegramId,
@@ -341,7 +324,6 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
     duration,
     fileSize,
     mimeType,
-    thumbnail,
     receivedAt: new Date(),
   });
 

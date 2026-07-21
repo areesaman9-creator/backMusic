@@ -1,17 +1,16 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import crypto from "crypto";
+import { getGlobalPromo } from "../utils/globalPromoCache";
+import { computeEffectivePremium } from "../utils/premium";
 
 // ── Payment gateway config ─────────────────────────────────────────
-const PAYMENT_GATEWAY_URL =
-  process.env.PAYMENT_GATEWAY_URL;
-const PUBLIC_API_URL =
-  process.env.PUBLIC_API_URL;
-
+const PAYMENT_GATEWAY_URL = process.env.PAYMENT_GATEWAY_URL;
+const PUBLIC_API_URL = process.env.PUBLIC_API_URL;
 
 async function getActivePlans(db: any) {
   const count = await db.collection("subscription_plans").countDocuments();
-  
+
   return db
     .collection("subscription_plans")
     .find({ isActive: { $ne: false } })
@@ -28,7 +27,7 @@ async function getPlanByPlanId(planId: string, db: any) {
 export const createSubscriptionOrder = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const userId = (req as any).user.id.toString();
@@ -45,7 +44,7 @@ export const createSubscriptionOrder = async (
     // ─────────────────────────────────────────────────────────
     // 🧪 TEST MODE — for testing only, remove this block before production
     // ─────────────────────────────────────────────────────────
-    const TEST_MODE = true; // ← set to false (or delete this whole block) when going to production
+    const TEST_MODE = true;
 
     if (TEST_MODE) {
       await db.collection("subscription_orders").insertOne({
@@ -73,8 +72,6 @@ export const createSubscriptionOrder = async (
           plan: plan.title,
         },
       });
-
-      
     }
     // ─────────────────────────────────────────────────────────
     // end of test block
@@ -110,38 +107,49 @@ export const createSubscriptionOrder = async (
 export const subscriptionCallback = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
-    const { orderId, status } = req.query as { orderId?: string; status?: string };
+    const { orderId, status } = req.query as {
+      orderId?: string;
+      status?: string;
+    };
     const db = mongoose.connection.db;
 
-    const order = await db.collection("subscription_orders").findOne({ orderId });
-    if (!order) return res.status(404).send(_resultPage(false, "Order not found"));
+    const order = await db
+      .collection("subscription_orders")
+      .findOne({ orderId });
+    if (!order)
+      return res.status(404).send(_resultPage(false, "Order not found"));
 
     if (order.status === "paid") {
-      return res.send(_resultPage(true, "This payment has already been confirmed"));
+      return res.send(
+        _resultPage(true, "This payment has already been confirmed"),
+      );
     }
 
     const isSuccess = status === "success" || status === "OK" || status === "1";
     if (!isSuccess) {
-      await db.collection("subscription_orders").updateOne(
-        { orderId },
-        { $set: { status: "failed", failedAt: new Date() } }
-      );
+      await db
+        .collection("subscription_orders")
+        .updateOne(
+          { orderId },
+          { $set: { status: "failed", failedAt: new Date() } },
+        );
       return res.send(_resultPage(false, "Payment failed"));
     }
 
     // TODO: add real transaction verification with your gateway here
 
-    await db.collection("subscription_orders").updateOne(
-      { orderId },
-      { $set: { status: "paid", paidAt: new Date() } }
-    );
+    await db
+      .collection("subscription_orders")
+      .updateOne({ orderId }, { $set: { status: "paid", paidAt: new Date() } });
 
     await _extendUserSubscription(order.userId, order.planId, order.days, db);
 
-    res.send(_resultPage(true, "Your subscription has been activated successfully 🎉"));
+    res.send(
+      _resultPage(true, "Your subscription has been activated successfully 🎉"),
+    );
   } catch (error) {
     next(error);
   }
@@ -151,16 +159,38 @@ async function _extendUserSubscription(
   userId: string,
   planId: string,
   days: number,
-  db: any
+  db: any,
 ) {
+  const now = new Date();
+  const promo = await getGlobalPromo();
+  const promoActive = promo.active && !!promo.endDate && promo.endDate > now;
+
+  if (promoActive) {
+    // در حین پروموشن فعال، روزهای خریداری‌شده نباید همین الان روی
+    // subscriptionExpiresAt اثر بذاره — فقط به تعداد روزهای رزروشده اضافه
+    // می‌شه تا موقع پایان/غیرفعال‌شدن پروموشن، یک‌جا از همون لحظه فعال بشه.
+    await db
+      .collection("users")
+      .updateOne({ _id: new mongoose.Types.ObjectId(userId) }, [
+        {
+          $set: {
+            subscriptionPlan: planId,
+            reservedDaysAfterPromo: {
+              $add: [{ $ifNull: ["$reservedDaysAfterPromo", 0] }, days],
+            },
+          },
+        },
+      ]);
+    return;
+  }
+
   const user = await db
     .collection("users")
     .findOne(
       { _id: new mongoose.Types.ObjectId(userId) },
-      { projection: { subscriptionExpiresAt: 1 } }
+      { projection: { subscriptionExpiresAt: 1 } },
     );
 
-  const now = new Date();
   const base =
     user?.subscriptionExpiresAt && new Date(user.subscriptionExpiresAt) > now
       ? new Date(user.subscriptionExpiresAt)
@@ -168,12 +198,13 @@ async function _extendUserSubscription(
 
   const newExpiry = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
 
-  await db.collection("users").updateOne(
-    { _id: new mongoose.Types.ObjectId(userId) },
-    { $set: { subscriptionPlan: planId, subscriptionExpiresAt: newExpiry } }
-  );
+  await db
+    .collection("users")
+    .updateOne(
+      { _id: new mongoose.Types.ObjectId(userId) },
+      { $set: { subscriptionPlan: planId, subscriptionExpiresAt: newExpiry } },
+    );
 }
-
 function _resultPage(success: boolean, message: string): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
   <title>Payment Result</title>
@@ -197,7 +228,7 @@ function _resultPage(success: boolean, message: string): string {
 export const getOrderStatus = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const userId = (req as any).user.id.toString();
@@ -209,12 +240,18 @@ export const getOrderStatus = async (
       .findOne({ orderId, userId });
 
     if (!order) {
-      return res.status(404).json({ success: false, message: "Order not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
     }
 
     res.json({
       success: true,
-      data: { orderId: order.orderId, status: order.status, planId: order.planId },
+      data: {
+        orderId: order.orderId,
+        status: order.status,
+        planId: order.planId,
+      },
     });
   } catch (error) {
     next(error);
@@ -225,28 +262,26 @@ export const getOrderStatus = async (
 export const getSubscriptionStatus = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
-    const userId = (req as any).user.id.toString();
-    const db = mongoose.connection.db;
+    const user = (req as any).user;
+    const promo = (req as any).globalPromo || (await getGlobalPromo());
 
-    const user = await db
-      .collection("users")
-      .findOne(
-        { _id: new mongoose.Types.ObjectId(userId) },
-        { projection: { subscriptionPlan: 1, subscriptionExpiresAt: 1 } }
+    const { isPremium, effectiveExpiresAt, promoActive } =
+      computeEffectivePremium(
+        user?.subscriptionExpiresAt,
+        promo,
+        user?.reservedDaysAfterPromo,
       );
-
-    const expiresAt = user?.subscriptionExpiresAt ?? null;
-    const isPremium = !!expiresAt && new Date(expiresAt) > new Date();
 
     res.json({
       success: true,
       data: {
         isPremium,
         subscriptionPlan: user?.subscriptionPlan ?? null,
-        subscriptionExpiresAt: expiresAt,
+        subscriptionExpiresAt: effectiveExpiresAt,
+        globalPromoEndDate: promoActive ? promo.endDate : null,
       },
     });
   } catch (error) {
@@ -255,7 +290,11 @@ export const getSubscriptionStatus = async (
 };
 
 // ── GET /api/subscription/plans ─────────────────────────────────────
-export const getPlans = async (_req: Request, res: Response, next: NextFunction) => {
+export const getPlans = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const db = mongoose.connection.db;
     const plans = await getActivePlans(db);

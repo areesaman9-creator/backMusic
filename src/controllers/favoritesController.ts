@@ -1,13 +1,12 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
+import { signThumbnailUrl } from "../utils/thumbnailToken";
 
 // ── GET /api/favorites ─────────────────────────────────────────
-// قبلاً: 2 query جدا + O(n²) sort در JS
-// الان: یک aggregate — ترتیب هم حفظ می‌شه
 export const getFavorites = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const userId = (req as any).user.id.toString();
@@ -24,7 +23,9 @@ export const getFavorites = async (
           $addFields: {
             _songObjId: {
               $cond: {
-                if: { $regexMatch: { input: "$songId", regex: /^[a-f\d]{24}$/i } },
+                if: {
+                  $regexMatch: { input: "$songId", regex: /^[a-f\d]{24}$/i },
+                },
                 then: { $toObjectId: "$songId" },
                 else: null,
               },
@@ -49,8 +50,11 @@ export const getFavorites = async (
         { $replaceRoot: { newRoot: { $arrayElemAt: ["$_song", 0] } } },
       ])
       .toArray();
-
-    res.json({ success: true, data: songs });
+    const data = songs.map((s: any) => ({
+      ...s,
+      thumbnail: signThumbnailUrl(s._id.toString()),
+    }));
+    res.json({ success: true, data });
   } catch (error) {
     next(error);
   }
@@ -60,7 +64,7 @@ export const getFavorites = async (
 export const toggleFavorite = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
     const userId = (req as any).user.id.toString();

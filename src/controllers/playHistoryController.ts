@@ -39,9 +39,15 @@ export const getMostPlayed = async (
       .find({ userId })
       .sort({ playCount: -1 })
       .limit(limit)
-      .project({ songId: 1 })
+      .project({ songId: 1, playCount: 1 })
       .toArray();
-    res.json({ success: true, data: rows.map((r) => r.songId) });
+    res.json({
+      success: true,
+      data: rows.map((r) => ({
+        songId: r.songId,
+        playCount: r.playCount || 0,
+      })),
+    });
   } catch (error) {
     next(error);
   }

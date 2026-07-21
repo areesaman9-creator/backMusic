@@ -12,6 +12,7 @@ export interface IUser extends Document {
   refreshToken?: string;
   subscriptionPlan: string | null;
   subscriptionExpiresAt: Date | null;
+  reservedDaysAfterPromo: { type: Number, default: null },
   role: string;
   comparePassword(candidatePassword: string): Promise<boolean>;
   toPublicJSON(): object;

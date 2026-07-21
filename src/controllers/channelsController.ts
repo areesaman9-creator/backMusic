@@ -3,9 +3,6 @@ import mongoose from "mongoose";
 import telegramService from "../services/telegram";
 import { buildSearchFields } from "../utils/search";
 
-// const DEFAULT_COVER_URL =
-//   "https://res.cloudinary.com/doxbcawbz/image/upload/f_auto,q_auto/default_artwork_erioxt";
-
 // ── GET /api/channels ──────────────────────────────────────────
 export const getUserChannels = async (req, res, next) => {
   try {
@@ -63,7 +60,6 @@ export const addChannel = async (req, res, next) => {
     const username = channelUsername.replace("@", "");
     const db = mongoose.connection.db;
 
-    // چک کن یوزر قبلاً این چنل رو داره
     const alreadyAdded = await db.collection("user_channels").findOne({
       userId,
       channelUsername: username,
@@ -111,7 +107,6 @@ export const addChannel = async (req, res, next) => {
       .status(201)
       .json({ success: true, msg: "Channel added.", data: channel });
 
-    // فقط اگه چنل جدیده sync کن
     if (needsSync) {
       _syncInBackground(username, userId, db).catch(console.error);
     }
@@ -165,7 +160,6 @@ export const syncChannel = async (req, res, next) => {
     const { username } = req.params;
     const db = mongoose.connection.db;
 
-    // چک کن یوزر این چنل رو داره
     const userChannel = await db.collection("user_channels").findOne({
       userId,
       channelUsername: username,
@@ -274,7 +268,6 @@ export async function _syncInBackground(
 
   const lastMessageId = latestSong[0]?.messageId ?? 0;
 
-  // ریست شمارنده‌ها قبل از شروع
   await db
     .collection("channels")
     .updateOne(
@@ -321,7 +314,6 @@ export async function _syncInBackground(
         .collection("songs")
         .countDocuments({ channelUsername: username });
 
-      // ← آپدیت فوری بعد هر batch، نه در پایان
       await db.collection("channels").updateOne(
         { channelUsername: username },
         {
@@ -359,39 +351,6 @@ export async function _syncInBackground(
       },
     },
   );
-
-  const CONCURRENCY = 10;
-
-  setImmediate(async () => {
-    const filesToProcess = result.files!.filter(
-      (f) => !f.thumbnail || f.thumbnail === null,
-    );
-
-    let idx = 0;
-
-    async function worker() {
-      while (idx < filesToProcess.length) {
-        const file = filesToProcess[idx++];
-        try {
-          const thumbnail = await telegramService.downloadSongThumbnail(
-            username,
-            file.messageId,
-            userId,
-          );
-          if (thumbnail) {
-            await db
-              .collection("songs")
-              .updateOne(
-                { channelUsername: username, messageId: file.messageId },
-                { $set: { thumbnail } },
-              );
-          }
-        } catch (_) {}
-      }
-    }
-
-    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
-  });
 }
 
 // ── Reusable helper ────────────────────────────────────────────

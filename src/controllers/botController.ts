@@ -4,6 +4,7 @@ import {
   generateConnectionCode,
   broadcastMessage,
 } from "../services/telegramBot";
+import { signThumbnailUrl } from "../utils/thumbnailToken";
 
 export const generateCode = async (
   req: Request,
@@ -99,7 +100,7 @@ export const getBotSongs = async (
       duration: s.duration,
       fileId: s.fileId,
       fileSize: s.fileSize,
-      thumbnail: s.thumbnail,
+      thumbnail: signThumbnailUrl(s._id.toString()),
       messageId: s.messageId,
       isFavorite: false,
     }));

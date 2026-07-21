@@ -11,7 +11,6 @@ const MAX_DEVICES = 3;
 function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
-
 // ── POST /api/auth/telegram ─────────────────────────────────────
 
 export const telegramAuth = async (
