@@ -15,22 +15,22 @@ const app = express();
 // MongoDB
 connectDB();
 
-app.set("trust proxy", true);
+// app.set("trust proxy", true);
 
 // Security
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 // Rate Limiting
-app.use(
-  "/api/",
-  rateLimit({
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000"),
-    max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "200"),
-    message: { success: false, message: "Too many requests, try again later." },
-    standardHeaders: true,
-    legacyHeaders: false,
-  }),
-);
+// app.use(
+//   "/api/",
+//   rateLimit({
+//     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000"),
+//     max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "200"),
+//     message: { success: false, message: "Too many requests, try again later." },
+//     standardHeaders: true,
+//     legacyHeaders: false,
+//   }),
+// );
 
 // CORS
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*", credentials: true }));
