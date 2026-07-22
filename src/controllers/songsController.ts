@@ -408,83 +408,37 @@ function setCachedThumb(id: string, buffer: Buffer) {
   thumbCache.set(id, { buffer, expiresAt: Date.now() + THUMB_CACHE_TTL_MS });
 }
 
-// ── NEW: لاگ ساخت‌یافته برای تشخیص مشکل شبکه/اپراتور ──
-function logThumbAccess(req: Request, extra: Record<string, any>) {
-  try {
-    console.log(
-      JSON.stringify({
-        tag: "thumb_access",
-        ts: new Date().toISOString(),
-        cfRay: req.headers["cf-ray"] || null,
-        cfCountry: req.headers["cf-ipcountry"] || null,
-        cfConnectingIp: req.headers["cf-connecting-ip"] || req.ip,
-        ua: req.headers["user-agent"] || null,
-        encoding: req.query.encoding || "binary",
-        ...extra,
-      }),
-    );
-  } catch {}
-}
-
-// ── GET /api/songs/:id/thumbnail?exp=...&sig=...[&encoding=base64] ─────────
+// ── GET /api/songs/:id/thumbnail?exp=...&sig=... ─────────────────
 // عمداً authenticate نداره — امضای HMAC خودش auth رو تأمین می‌کنه
 export const getSongThumbnail = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
-  const startedAt = Date.now();
-  const { id } = req.params;
-  const wantsBase64 = req.query.encoding === "base64";
-
   try {
+    const { id } = req.params;
     const exp = parseInt((req.query.exp as string) || "0", 10);
     const sig = (req.query.sig as string) || "";
 
     if (!verifyThumbnailToken(id, exp, sig)) {
-      logThumbAccess(req, { id, result: "invalid_signature", ms: Date.now() - startedAt });
       return res
         .status(403)
         .json({ success: false, message: "Invalid or expired link" });
     }
 
-    const respond = (buffer: Buffer, source: string) => {
-      logThumbAccess(req, {
-        id,
-        result: "ok",
-        source,
-        bytes: buffer.length,
-        ms: Date.now() - startedAt,
-      });
-
-      // مسیر fallback: بجای باینری image/jpeg، JSON برمی‌گردونیم.
-      // پراکسی‌های فشرده‌سازی عکس اپراتور و Cloudflare Polish روی
-      // application/json دست نمی‌زنن، فقط روی image/* فعال می‌شن.
-      if (wantsBase64) {
-        return res.json({
-          success: true,
-          dataUrl: `data:image/jpeg;base64,${buffer.toString("base64")}`,
-        });
-      }
-
+    const cached = getCachedThumb(id);
+    if (cached) {
       res.set({
         "Content-Type": "image/jpeg",
-        "Content-Length": buffer.length.toString(),
-        // no-transform: به CDN/پراکسی‌های میانی می‌گه بایت‌ها رو دست نزنن
-        "Cache-Control": "public, max-age=86400, immutable, no-transform",
-        "X-Thumb-Source": source,
+        "Cache-Control": "public, max-age=86400, immutable",
       });
-      return res.send(buffer);
-    };
-
-    const cached = getCachedThumb(id);
-    if (cached) return respond(cached, "server-cache");
+      return res.send(cached);
+    }
 
     let objId: mongoose.Types.ObjectId;
     try {
       objId = new mongoose.Types.ObjectId(id);
     } catch {
-      logThumbAccess(req, { id, result: "invalid_id", ms: Date.now() - startedAt });
       return res
         .status(400)
         .json({ success: false, message: "Invalid song id" });
@@ -505,12 +459,10 @@ export const getSongThumbnail = async (
           { _id: objId },
           { projection: { channelUsername: 1, messageId: 1, userId: 1 } },
         );
-      if (!doc) {
-        logThumbAccess(req, { id, result: "song_not_found", ms: Date.now() - startedAt });
+      if (!doc)
         return res
           .status(404)
           .json({ success: false, message: "Song not found" });
-      }
       botUserId = (doc as any).userId;
     }
 
@@ -520,7 +472,6 @@ export const getSongThumbnail = async (
       botUserId,
     );
     if (!dataUrl) {
-      logThumbAccess(req, { id, result: "telegram_no_thumb", ms: Date.now() - startedAt });
       return res
         .status(404)
         .json({ success: false, message: "No thumbnail available" });
@@ -528,21 +479,18 @@ export const getSongThumbnail = async (
 
     const buffer = Buffer.from(dataUrl.split(",")[1] ?? "", "base64");
     if (buffer.length === 0) {
-      logThumbAccess(req, { id, result: "empty_buffer", ms: Date.now() - startedAt });
       return res
         .status(404)
         .json({ success: false, message: "No thumbnail available" });
     }
 
     setCachedThumb(id, buffer);
-    return respond(buffer, "telegram-fresh");
-  } catch (error: any) {
-    logThumbAccess(req, {
-      id,
-      result: "exception",
-      error: error?.message,
-      ms: Date.now() - startedAt,
+    res.set({
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "public, max-age=86400, immutable",
     });
+    res.send(buffer);
+  } catch (error) {
     next(error);
   }
 };
