@@ -467,7 +467,7 @@ async function sendAccountInfo(
     const [channelCount, playlistCount, userChannels, botSongsCount] =
       await Promise.all([
         db.collection("user_channels").countDocuments({ userId }),
-        db.collection("user_playlists").countDocuments({ userId }),
+        db.collection("user_playlists").countDocuments({ userIds: userId }),
         db
           .collection("user_channels")
           .find({ userId })
@@ -627,7 +627,7 @@ async function sendAllPlaylists(
 
   const playlists = await db
     .collection("user_playlists")
-    .find({ userId })
+    .find({ userIds: userId })
     .sort({ updatedAt: -1 })
     .toArray();
 
