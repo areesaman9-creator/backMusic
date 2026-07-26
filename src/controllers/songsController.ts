@@ -100,7 +100,7 @@ export const getSongs = async (
       }
     }
 
-    const includeBotSongs = !channelUsername && !hasSearch && !sortBy;
+    const includeBotSongs = false;
 
     if (!includeBotSongs) {
       const [result] = await db

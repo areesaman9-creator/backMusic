@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import axios from "axios";
 import User from "../models/User";
+import { buildSearchFields } from "../utils/search";
 
 function escapeMarkdown(text?: string | null): string {
   if (!text) return "";
@@ -312,6 +313,8 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
   const mimeType =
     msg.audio?.mime_type || (audio as any).mime_type || "audio/mpeg";
 
+  const { searchWords, searchPrefixes } = buildSearchFields(title, artist);
+
   await db.collection("bot_songs").insertOne({
     userId: connection.userId,
     telegramId,
@@ -326,6 +329,27 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
     mimeType,
     receivedAt: new Date(),
   });
+
+  await db.collection("songs").updateOne(
+    { channelUsername: storageChannelUsername, messageId: storageMessageId },
+    {
+      $set: {
+        channelUsername: storageChannelUsername,
+        title,
+        artist,
+        duration,
+        fileId: originalFileId,
+        fileSize,
+        mimeType,
+        messageId: storageMessageId,
+        messageDate: new Date(),
+        thumbnail: null,
+        searchWords,
+        searchPrefixes,
+      },
+    },
+    { upsert: true },
+  );
 
   const durationStr =
     duration > 0
