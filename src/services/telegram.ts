@@ -27,6 +27,8 @@ export interface StreamDownloadHandle {
 
 class TelegramService {
   private client: TelegramClient | null = null;
+  private _resolvedEntityCache = new Map<string, any>();
+
   async initialize(_userId?: any): Promise<TelegramClient> {
     if (this.client) return this.client;
 
@@ -39,8 +41,6 @@ class TelegramService {
     return this.client;
   }
 
-  // ── چنل‌های private با invite link (t.me/+hash یا t.me/joinchat/hash) ──
-  // این‌ها username ندارن، پس getEntity() مستقیم روشون fail میشه.
   private isInviteLink(input: string): boolean {
     return (
       /t\.me\/(\+|joinchat\/)/i.test(input) || /^\+[\w-]+$/.test(input.trim())
@@ -63,20 +63,25 @@ class TelegramService {
 
     const hash = this.extractInviteHash(usernameOrLink);
 
+    const cached = this._resolvedEntityCache.get(hash);
+    if (cached) return cached;
+
     const invite: any = await this.client!.invoke(
       new Api.messages.CheckChatInvite({ hash }),
     );
 
-    // قبلاً join شده — چت مستقیم برمی‌گرده
-    if (invite.chat) return invite.chat;
+    if (invite.chat) {
+      this._resolvedEntityCache.set(hash, invite.chat);
+      return invite.chat;
+    }
 
-    // هنوز join نشده — باید join بشه تا پیام‌هاش قابل خوندن باشه
     try {
       const joined: any = await this.client!.invoke(
         new Api.messages.ImportChatInvite({ hash }),
       );
       const chat = joined.chats?.[0];
       if (!chat) throw new Error("Could not resolve invite link");
+      this._resolvedEntityCache.set(hash, chat);
       return chat;
     } catch (err: any) {
       if (
@@ -86,7 +91,10 @@ class TelegramService {
         const recheck: any = await this.client!.invoke(
           new Api.messages.CheckChatInvite({ hash }),
         );
-        if (recheck.chat) return recheck.chat;
+        if (recheck.chat) {
+          this._resolvedEntityCache.set(hash, recheck.chat);
+          return recheck.chat;
+        }
       }
       throw err;
     }
