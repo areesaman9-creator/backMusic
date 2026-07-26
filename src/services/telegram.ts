@@ -39,6 +39,59 @@ class TelegramService {
     return this.client;
   }
 
+  // ── چنل‌های private با invite link (t.me/+hash یا t.me/joinchat/hash) ──
+  // این‌ها username ندارن، پس getEntity() مستقیم روشون fail میشه.
+  private isInviteLink(input: string): boolean {
+    return (
+      /t\.me\/(\+|joinchat\/)/i.test(input) || /^\+[\w-]+$/.test(input.trim())
+    );
+  }
+
+  private extractInviteHash(input: string): string {
+    const trimmed = input.trim();
+    const joinchatMatch = trimmed.match(/joinchat\/([\w-]+)/i);
+    if (joinchatMatch) return joinchatMatch[1];
+    const plusMatch = trimmed.match(/t\.me\/\+([\w-]+)/i);
+    if (plusMatch) return plusMatch[1];
+    return trimmed.replace(/^\+/, "");
+  }
+
+  private async resolveEntity(usernameOrLink: string): Promise<any> {
+    if (!this.isInviteLink(usernameOrLink)) {
+      return this.client!.getEntity(usernameOrLink);
+    }
+
+    const hash = this.extractInviteHash(usernameOrLink);
+
+    const invite: any = await this.client!.invoke(
+      new Api.messages.CheckChatInvite({ hash }),
+    );
+
+    // قبلاً join شده — چت مستقیم برمی‌گرده
+    if (invite.chat) return invite.chat;
+
+    // هنوز join نشده — باید join بشه تا پیام‌هاش قابل خوندن باشه
+    try {
+      const joined: any = await this.client!.invoke(
+        new Api.messages.ImportChatInvite({ hash }),
+      );
+      const chat = joined.chats?.[0];
+      if (!chat) throw new Error("Could not resolve invite link");
+      return chat;
+    } catch (err: any) {
+      if (
+        err.errorMessage === "USER_ALREADY_PARTICIPANT" ||
+        err.message?.includes("USER_ALREADY_PARTICIPANT")
+      ) {
+        const recheck: any = await this.client!.invoke(
+          new Api.messages.CheckChatInvite({ hash }),
+        );
+        if (recheck.chat) return recheck.chat;
+      }
+      throw err;
+    }
+  }
+
   private async getDocumentThumbnail(
     doc: any,
     channelUsername: string,
@@ -86,7 +139,7 @@ class TelegramService {
     try {
       await this.initialize(userId);
       const username = channelUsername.replace("@", "");
-      const entity = await this.client!.getEntity(username);
+      const entity = await this.resolveEntity(username);
       return (entity as any).title || null;
     } catch (error: any) {
       console.error("Failed to get channel name:", error);
@@ -103,7 +156,7 @@ class TelegramService {
     try {
       await this.initialize(userId);
       const username = channelUsername.replace("@", "");
-      const entity = await this.client!.getEntity(username);
+      const entity = await this.resolveEntity(username);
 
       const audioFiles: AudioFile[] = [];
       let offsetId = 0;
@@ -192,7 +245,7 @@ class TelegramService {
     try {
       await this.initialize(userId);
       const username = channelUsername.replace("@", "");
-      const entity = await this.client!.getEntity(username);
+      const entity = await this.resolveEntity(username);
       const message = await this.client!.getMessages(entity, {
         ids: messageId,
       });
@@ -223,7 +276,7 @@ class TelegramService {
   ): Promise<StreamDownloadHandle> {
     await this.initialize(userId);
     const username = channelUsername.replace("@", "");
-    const entity = await this.client!.getEntity(username);
+    const entity = await this.resolveEntity(username);
     const messages = await this.client!.getMessages(entity, { ids: messageId });
 
     if (!messages[0] || !messages[0].media) {
@@ -266,7 +319,7 @@ class TelegramService {
     try {
       await this.initialize(userId);
       const username = channelUsername.replace("@", "");
-      const entity = await this.client!.getEntity(username);
+      const entity = await this.resolveEntity(username);
       if ((entity as any).photo) {
         const buffer = (await this.client!.downloadProfilePhoto(
           entity,
@@ -290,7 +343,7 @@ class TelegramService {
     try {
       await this.initialize(userId);
       const username = channelUsername.replace("@", "");
-      const entity = await this.client!.getEntity(username);
+      const entity = await this.resolveEntity(username);
       const messages = await this.client!.getMessages(entity, {
         ids: messageId,
       });

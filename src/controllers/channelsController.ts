@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import telegramService from "../services/telegram";
 import { buildSearchFields } from "../utils/search";
+import { normalizeChannelInput } from "../utils/channelInput";
 
 // ── GET /api/channels ──────────────────────────────────────────
 export const getUserChannels = async (req, res, next) => {
@@ -57,14 +58,18 @@ export const addChannel = async (req, res, next) => {
       });
     }
 
-    const username = channelUsername.replace("@", "");
+    const username = normalizeChannelInput(channelUsername);
+    if (!username) {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Invalid channel address" });
+    }
     const db = mongoose.connection.db;
 
     const alreadyAdded = await db.collection("user_channels").findOne({
       userId,
       channelUsername: username,
-    });
-    if (alreadyAdded) {
+    });    if (alreadyAdded) {
       return res
         .status(400)
         .json({ success: false, msg: "Channel already added" });
@@ -361,7 +366,8 @@ export async function addChannelForUser(
   db: any,
 ): Promise<{ added: boolean; reason?: string }> {
   try {
-    const username = channelUsername.replace("@", "");
+    const username = normalizeChannelInput(channelUsername);
+    if (!username) return { added: false, reason: "invalid username" };
 
     const exists = await db.collection("user_channels").findOne({
       userId,
