@@ -360,7 +360,13 @@ class TelegramService {
       if (!doc) return null;
       return await this.getDocumentThumbnail(doc, username, messageId);
     } catch (error: any) {
-      console.error("Failed to download song thumbnail:", error);
+      if (error?.errorMessage === "CHANNEL_PRIVATE") {
+        console.warn(
+          `⚠️  Channel @${channelUsername} is private/inaccessible — skipping thumbnail (msg ${messageId})`,
+        );
+      } else {
+        console.error("Failed to download song thumbnail:", error);
+      }
       return null;
     }
   }

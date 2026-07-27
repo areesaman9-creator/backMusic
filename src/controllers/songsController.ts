@@ -408,8 +408,28 @@ function setCachedThumb(id: string, buffer: Buffer) {
   thumbCache.set(id, { buffer, expiresAt: Date.now() + THUMB_CACHE_TTL_MS });
 }
 
+// ── کش شکست — از تلاش مکرر برای کانال‌های private/غیرقابل‌دسترس جلوگیری می‌کنه ──
+const THUMB_FAIL_TTL_MS = 60 * 60 * 1000; // ۱ ساعت
+const thumbFailCache = new Map<string, number>();
+
+function hasRecentlyFailed(id: string): boolean {
+  const expiresAt = thumbFailCache.get(id);
+  if (!expiresAt) return false;
+  if (Date.now() > expiresAt) {
+    thumbFailCache.delete(id);
+    return false;
+  }
+  return true;
+}
+
+function markThumbFailed(id: string) {
+  if (thumbFailCache.size >= THUMB_CACHE_MAX) {
+    thumbFailCache.delete(thumbFailCache.keys().next().value);
+  }
+  thumbFailCache.set(id, Date.now() + THUMB_FAIL_TTL_MS);
+}
+
 // ── GET /api/songs/:id/thumbnail?exp=...&sig=... ─────────────────
-// عمداً authenticate نداره — امضای HMAC خودش auth رو تأمین می‌کنه
 export const getSongThumbnail = async (
   req: Request,
   res: Response,
@@ -433,6 +453,12 @@ export const getSongThumbnail = async (
         "Cache-Control": "public, max-age=86400, immutable",
       });
       return res.send(cached);
+    }
+
+    if (hasRecentlyFailed(id)) {
+      return res
+        .status(404)
+        .json({ success: false, message: "No thumbnail available" });
     }
 
     let objId: mongoose.Types.ObjectId;
@@ -472,6 +498,7 @@ export const getSongThumbnail = async (
       botUserId,
     );
     if (!dataUrl) {
+      markThumbFailed(id);
       return res
         .status(404)
         .json({ success: false, message: "No thumbnail available" });
