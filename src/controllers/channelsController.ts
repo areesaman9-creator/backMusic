@@ -257,6 +257,38 @@ export const getSyncStatus = async (req, res, next) => {
   }
 };
 
+// ── GET /api/channels/:id/info ──────────────────────────────────
+// عمومیه — نیازی به join بودن کاربر نداره، فقط پروفایل عمومی چنل رو می‌ده
+export const getChannelInfo = async (req, res, next) => {
+  try {
+    const { username } = req.params;
+    const db = mongoose.connection.db;
+
+    const channel = await db.collection("channels").findOne(
+      { channelUsername: username },
+      {
+        projection: {
+          channelUsername: 1,
+          channelName: 1,
+          photoUrl: 1,
+          status: 1,
+          songsCount: 1,
+          totalEstimate: 1,
+          lastSync: 1,
+        },
+      },
+    );
+
+    if (!channel) {
+      return res.status(404).json({ success: false, msg: "Channel not found" });
+    }
+
+    res.json({ success: true, data: channel });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ── Background sync ────────────────────────────────────────────
 export async function _syncInBackground(
   username: string,

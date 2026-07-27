@@ -23,6 +23,7 @@ import {
   syncChannel,
   getSyncStatus,
   _syncInBackground,
+  getChannelInfo,
 } from "../controllers/channelsController";
 import {
   getSongById,
@@ -141,6 +142,7 @@ router.post("/channels", authenticate, requirePremium, addChannel);
 router.delete("/channels/:username", authenticate, removeChannel);
 router.post("/channels/:username/sync", authenticate, syncChannel);
 router.get("/channels/:username/sync-status", authenticate, getSyncStatus);
+router.get("/channels/:username/info", authenticate, getChannelInfo);
 
 // ── Admin: Sync Channel ─────────────────────────────────────────
 router.post(
