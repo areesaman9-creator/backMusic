@@ -106,12 +106,12 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
     }
 
     const authText = isNew
-      ? `🎵 *Welcome to Tel Player!*\n\nYour account has been created successfully.`
-      : `✅ *Authentication Successful*\n\nWelcome back to Tel Player.`;
+      ? `🎵 *Welcome to Telody!*\n\nYour account has been created successfully.`
+      : `✅ *Authentication Successful*\n\nWelcome back to Telody.`;
 
     await bot.sendMessage(
       chatId,
-      `${authText}\n\n🎧 *Tel Player*\n\nWhat would you like to do?`,
+      `${authText}\n\n🎧 *Telody*\n\nWhat would you like to do?`,
       { parse_mode: "Markdown", reply_markup: mainMenuKeyboard() },
     );
   } catch (err) {
@@ -163,7 +163,7 @@ bot.onText(/^[A-F0-9]{6}$/, async (msg) => {
   bot.sendMessage(
     chatId,
     `✅ *Connected successfully!*\n\n` +
-      `You can now send me audio files and they'll appear in your Tel Player app. 🎶\n\n` +
+      `You can now send me audio files and they'll appear in your Telody app. 🎶\n\n` +
       `Use /mystats to see your account info.`,
     { parse_mode: "Markdown" },
   );
@@ -241,7 +241,7 @@ bot.onText(/\/mystats/, async (msg) => {
       `🎵 Songs sent via bot: ${botSongsCount}\n` +
       `💎 Subscription: ${isPremium ? "Active ✅" : "None ❌"}\n` +
       (isPremium ? `📅 Expires: ${expiryDate}\n` : "") +
-      `\nTo manage your subscription, open the Tel Player app.`,
+      `\nTo manage your subscription, open the Telody app.`,
     { parse_mode: "Markdown" },
   );
 });
@@ -360,7 +360,7 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
     chatId,
     `✅ *${title}* received!\n` +
       `🎤 ${artist !== "Unknown" ? artist : "Unknown artist"}  •  ⏱ ${durationStr}\n\n` +
-      `Open Tel Player to download and play it. 🎵`,
+      `Open Telody to download and play it. 🎵`,
     { parse_mode: "Markdown" },
   );
 }
@@ -417,7 +417,7 @@ async function sendMainMenu(chatId: number, messageId?: number) {
   await sendOrEdit(
     chatId,
     messageId,
-    `🎧 *Tel Player*\n\nWhat would you like to do?`,
+    `🎧 *Telody*\n\nWhat would you like to do?`,
     { parse_mode: "Markdown", reply_markup: mainMenuKeyboard() },
   );
 }
@@ -438,7 +438,7 @@ async function handleUpdateUsername(
       return sendOrEdit(
         chatId,
         messageId,
-        "❌ *Account Not Found*\n\nPlease log in to Tel Player first, then try again.",
+        "❌ *Account Not Found*\n\nPlease log in to Telody first, then try again.",
         { parse_mode: "Markdown", reply_markup: backToMenuKeyboard },
       );
     }
@@ -482,7 +482,7 @@ async function sendAccountInfo(
       return sendOrEdit(
         chatId,
         messageId,
-        "❌ *Account Not Found*\n\nPlease log in to Tel Player first.",
+        "❌ *Account Not Found*\n\nPlease log in to Telody first.",
         { parse_mode: "Markdown", reply_markup: backToMenuKeyboard },
       );
     }
@@ -545,7 +545,7 @@ async function sendAccountInfo(
       `📃 *Playlists:* ${playlistCount.toLocaleString()}\n\n` +
       `💎 Subscription: ${isPremium ? "Active ✅" : "None ❌"}\n` +
       (isPremium ? `📅 Expires: ${expiryDate}\n` : "") +
-      `\nTo manage your subscription, open the Tel Player app.`;
+      `\nTo manage your subscription, open the Telody app.`;
 
     await sendOrEdit(chatId, messageId, text, {
       parse_mode: "Markdown",
@@ -701,8 +701,8 @@ async function sendMusicGuide(
   const connected = !!connection;
 
   const text = connected
-    ? `📤 *Send Music*\n\n✅ This Telegram account is connected to Tel Player.\n\nJust send any audio file to this chat — it will be added to your *Bot Inbox* automatically. 🎶`
-    : `📤 *Send Music*\n\n⚠️ This Telegram account isn't connected yet.\n\nOpen Tel Player → *Bot Inbox* → *Get Connection Code*, then send that 6-character code here.\nOnce connected, any audio file you send will be added to your library automatically.`;
+    ? `📤 *Send Music*\n\n✅ This Telegram account is connected to Telody.\n\nJust send any audio file to this chat — it will be added to your *Bot Inbox* automatically. 🎶`
+    : `📤 *Send Music*\n\n⚠️ This Telegram account isn't connected yet.\n\nOpen Telody → *Bot Inbox* → *Get Connection Code*, then send that 6-character code here.\nOnce connected, any audio file you send will be added to your library automatically.`;
 
   await sendOrEdit(chatId, messageId, text, {
     parse_mode: "Markdown",
