@@ -203,7 +203,7 @@ export const updateProfile = async (
   next: NextFunction,
 ) => {
   try {
-    const { name, email } = req.body;
+    const { name, email, isPrivate } = req.body;
     const user = await User.findById((req as any).user.id);
     if (!user)
       return res
@@ -211,6 +211,7 @@ export const updateProfile = async (
         .json({ success: false, message: "User not found" });
 
     if (name !== undefined && name.trim()) user.name = name.trim();
+    if (isPrivate !== undefined) user.isPrivate = !!isPrivate;
 
     await user.save();
     res.status(200).json({

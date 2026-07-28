@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 
 export interface IUser extends Document {
   telegramId: string;
+  isPrivate: boolean;
   telegramUsername?: string;
   name: string;
   email?: string;
@@ -45,6 +46,7 @@ const userSchema = new Schema<IUser>(
     refreshToken: { type: String, select: false },
     subscriptionPlan: { type: String, default: null },
     subscriptionExpiresAt: { type: Date, default: null },
+    isPrivate: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
@@ -75,8 +77,9 @@ userSchema.methods.toPublicJSON = function () {
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
     lastLogin: this.lastLogin,
-    subscriptionPlan: this.subscriptionPlan,
+   subscriptionPlan: this.subscriptionPlan,
     subscriptionExpiresAt: this.subscriptionExpiresAt,
+    isPrivate: this.isPrivate,
   };
 };
 

@@ -8,7 +8,11 @@
  */
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import { buildSearchFields } from "../utils/search";
+import {
+  buildArtistSearchFields,
+  buildSearchFields,
+  buildTitleSearchFields,
+} from "../utils/search";
 
 dotenv.config({ path: ".env.local" });
 const BATCH_SIZE = 500;
@@ -42,11 +46,24 @@ async function backfill() {
       doc.title,
       doc.artist,
     );
+    const { searchWords: titleWords, searchPrefixes: titlePrefixes } =
+      buildTitleSearchFields(doc.title);
+    const { searchWords: artistWords, searchPrefixes: artistPrefixes } =
+      buildArtistSearchFields(doc.artist);
 
     bulkOps.push({
       updateOne: {
         filter: { _id: doc._id },
-        update: { $set: { searchWords, searchPrefixes } },
+        update: {
+          $set: {
+            searchWords,
+            searchPrefixes,
+            titleWords,
+            titlePrefixes,
+            artistWords,
+            artistPrefixes,
+          },
+        },
       },
     });
 
@@ -89,6 +106,30 @@ async function backfill() {
     .createIndex(
       { channelUsername: 1, searchPrefixes: 1 },
       { name: "songs_channel_search_prefixes", background: true },
+    );
+  await db
+    .collection("songs")
+    .createIndex(
+      { titleWords: 1 },
+      { name: "songs_title_words", background: true },
+    );
+  await db
+    .collection("songs")
+    .createIndex(
+      { titlePrefixes: 1 },
+      { name: "songs_title_prefixes", background: true },
+    );
+  await db
+    .collection("songs")
+    .createIndex(
+      { artistWords: 1 },
+      { name: "songs_artist_words", background: true },
+    );
+  await db
+    .collection("songs")
+    .createIndex(
+      { artistPrefixes: 1 },
+      { name: "songs_artist_prefixes", background: true },
     );
   console.log("✅ Indexes created");
 

@@ -54,12 +54,13 @@ export const createPlaylist = async (
         .status(400)
         .json({ success: false, msg: "Playlist name already exists" });
 
-    const newPlaylist = {
+     const newPlaylist = {
       ownerId: userId,
       userIds: [userId],
       name,
       coverImage: null,
       songIds: [],
+      isPublic: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -200,9 +201,9 @@ export const getPlaylistSongs = async (
     const limitNum = Math.min(200, parseInt(limit as string));
     const db = mongoose.connection.db;
 
-    const playlist = await db.collection("user_playlists").findOne({
+   const playlist = await db.collection("user_playlists").findOne({
       _id: new mongoose.Types.ObjectId(playlistId),
-      userIds: userId,
+      $or: [{ userIds: userId }, { isPublic: true }],
     });
     if (!playlist)
       return res
@@ -427,9 +428,9 @@ export const getPlaylistUsers = async (
     const playlistId = req.params.id;
     const db = mongoose.connection.db;
 
-    const playlist = await db.collection("user_playlists").findOne({
+   const playlist = await db.collection("user_playlists").findOne({
       _id: new mongoose.Types.ObjectId(playlistId),
-      userIds: userId,
+      $or: [{ userIds: userId }, { isPublic: true }],
     });
     if (!playlist)
       return res
@@ -612,6 +613,54 @@ export const searchUsers = async (
         telegramId: u.telegramId,
       })),
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ── PATCH /api/playlists/:id/visibility ───────────────────────
+export const updatePlaylistVisibility = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req as any).user.id.toString();
+    const playlistId = req.params.id;
+    const { isPublic } = req.body;
+
+    if (typeof isPublic !== "boolean") {
+      return res
+        .status(400)
+        .json({ success: false, msg: "isPublic (boolean) required" });
+    }
+
+    const db = mongoose.connection.db;
+    let objId: mongoose.Types.ObjectId;
+    try {
+      objId = new mongoose.Types.ObjectId(playlistId);
+    } catch {
+      return res
+        .status(400)
+        .json({ success: false, msg: "Invalid playlist id" });
+    }
+
+    const playlist = await db.collection("user_playlists").findOne({ _id: objId });
+    if (!playlist)
+      return res
+        .status(404)
+        .json({ success: false, msg: "Playlist not found" });
+    if (playlist.ownerId !== userId)
+      return res.status(403).json({
+        success: false,
+        msg: "Only the playlist owner can change visibility",
+      });
+
+    await db
+      .collection("user_playlists")
+      .updateOne({ _id: objId }, { $set: { isPublic, updatedAt: new Date() } });
+
+    res.json({ success: true, msg: "Visibility updated", isPublic });
   } catch (error) {
     next(error);
   }

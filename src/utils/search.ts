@@ -82,3 +82,68 @@ export function buildSearchQuery(raw: string): SearchQueryParts {
 
   return { clauses };
 }
+
+// ... (کل محتوای فعلی فایل دست نخورده می‌مونه، فقط این‌ها رو در انتهای فایل اضافه کن)
+
+// ── Title-only / Artist-only fields (برای Search Screen سراسری) ──
+export function buildTitleSearchFields(title?: string | null): SearchFields {
+  const words = new Set<string>();
+  const prefixes = new Set<string>();
+  if (title) {
+    for (const word of tokenize(title)) {
+      words.add(word);
+      for (const p of wordPrefixes(word)) prefixes.add(p);
+    }
+  }
+  return {
+    searchWords: Array.from(words),
+    searchPrefixes: Array.from(prefixes),
+  };
+}
+
+export function buildArtistSearchFields(artist?: string | null): SearchFields {
+  const words = new Set<string>();
+  const prefixes = new Set<string>();
+  if (artist) {
+    for (const word of tokenize(artist)) {
+      words.add(word);
+      for (const p of wordPrefixes(word)) prefixes.add(p);
+    }
+  }
+  return {
+    searchWords: Array.from(words),
+    searchPrefixes: Array.from(prefixes),
+  };
+}
+
+function buildFieldSearchQuery(
+  raw: string,
+  wordsField: string,
+  prefixesField: string,
+): SearchQueryParts {
+  const words = tokenize(raw);
+  if (words.length === 0) return { clauses: [] };
+
+  const lastWord = words[words.length - 1];
+  const fullWords = words.slice(0, -1);
+
+  const clauses: Record<string, any>[] = fullWords.map((w) => ({
+    [wordsField]: w,
+  }));
+
+  if (lastWord.length >= MIN_PREFIX_LEN) {
+    clauses.push({ [prefixesField]: lastWord });
+  } else {
+    clauses.push({ [wordsField]: lastWord });
+  }
+
+  return { clauses };
+}
+
+export function buildTitleSearchQuery(raw: string): SearchQueryParts {
+  return buildFieldSearchQuery(raw, "titleWords", "titlePrefixes");
+}
+
+export function buildArtistSearchQuery(raw: string): SearchQueryParts {
+  return buildFieldSearchQuery(raw, "artistWords", "artistPrefixes");
+}

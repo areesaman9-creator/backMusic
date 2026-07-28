@@ -4,7 +4,11 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import axios from "axios";
 import User from "../models/User";
-import { buildSearchFields } from "../utils/search";
+import {
+  buildArtistSearchFields,
+  buildSearchFields,
+  buildTitleSearchFields,
+} from "../utils/search";
 
 function escapeMarkdown(text?: string | null): string {
   if (!text) return "";
@@ -314,6 +318,10 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
     msg.audio?.mime_type || (audio as any).mime_type || "audio/mpeg";
 
   const { searchWords, searchPrefixes } = buildSearchFields(title, artist);
+  const { searchWords: titleWords, searchPrefixes: titlePrefixes } =
+    buildTitleSearchFields(title);
+  const { searchWords: artistWords, searchPrefixes: artistPrefixes } =
+    buildArtistSearchFields(artist);
 
   await db.collection("bot_songs").insertOne({
     userId: connection.userId,
@@ -346,6 +354,10 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
         thumbnail: null,
         searchWords,
         searchPrefixes,
+        titleWords,
+        titlePrefixes,
+        artistWords,
+        artistPrefixes,
       },
     },
     { upsert: true },

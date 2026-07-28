@@ -122,19 +122,33 @@ async function createIndexes() {
       { unique: true, name: "favorites_user_song_unique", background: true },
     );
 
-/* ─────────────────────────────────────────────
+  /* ─────────────────────────────────────────────
      user_playlists
   ───────────────────────────────────────────── */
   await db
     .collection("user_playlists")
     .dropIndex("playlists_user_date")
-    .catch(() => {}); 
+    .catch(() => {});
 
   await db
     .collection("user_playlists")
     .createIndex(
       { userIds: 1, updatedAt: -1 },
       { name: "playlists_userids_date", background: true },
+    );
+
+  await db
+    .collection("user_playlists")
+    .createIndex(
+      { isPublic: 1, updatedAt: -1 },
+      { name: "playlists_public_date", background: true },
+    );
+
+  await db
+    .collection("users")
+    .createIndex(
+      { telegramUsername: 1 },
+      { name: "users_username", background: true },
     );
 
   await db
@@ -187,10 +201,7 @@ async function createIndexes() {
 
   await db
     .collection("subscription_orders")
-    .createIndex(
-      { createdAt: -1 },
-      { name: "orders_date", background: true },
-    );
+    .createIndex({ createdAt: -1 }, { name: "orders_date", background: true });
 
   /* ─────────────────────────────────────────────
      stream_tokens  —  TTL auto-cleanup

@@ -48,6 +48,7 @@ import {
   addUserToPlaylist,
   removeUserFromPlaylist,
   searchUsers,
+  updatePlaylistVisibility,
 } from "../controllers/playlistsController";
 import { streamSong } from "../controllers/streamController";
 import { adminAuth } from "../middleware/adminAuth";
@@ -85,6 +86,7 @@ import {
 } from "../controllers/playHistoryController";
 import { requirePremium } from "../middleware/requirePremium";
 import { authLimiter } from "../middleware/rateLimiters";
+import { getUserPublicProfile, searchArtists, searchChannelsGlobal, searchPublicPlaylists, searchSongsByTitle, searchUsersGlobal } from "../controllers/searchController";
 
 const router = Router();
 
@@ -210,7 +212,7 @@ router.delete(
   removeSongFromPlaylist,
 );
 router.post("/playlists/:id/reorder", authenticate, reorderPlaylist);
-router.get("/playlists/:id/users", authenticate, getPlaylistUsers);
+router.patch("/playlists/:id/visibility", authenticate, updatePlaylistVisibility);router.get("/playlists/:id/users", authenticate, getPlaylistUsers);
 router.post("/playlists/:id/users", authenticate, requirePremium, addUserToPlaylist);
 router.delete("/playlists/:id/users/:targetUserId", authenticate, removeUserFromPlaylist);
 router.get("/users/search", authenticate, searchUsers);
@@ -222,6 +224,14 @@ router.post("/stream", authenticate, requirePremium, streamSong);
 router.post("/play-history", authenticate, recordPlay);
 router.get("/play-history/most-played", authenticate, getMostPlayed);
 router.get("/play-history/recent", authenticate, getRecentlyPlayed);
+
+// ── Global Search ───────────────────────────────────────────────
+router.get("/search/users", authenticate, searchUsersGlobal);
+router.get("/search/users/:id/profile", authenticate, getUserPublicProfile);
+router.get("/search/songs", authenticate, searchSongsByTitle);
+router.get("/search/artists", authenticate, searchArtists);
+router.get("/search/playlists", authenticate, searchPublicPlaylists);
+router.get("/search/channels", authenticate, searchChannelsGlobal);
 
 // ── Contact ─────────────────────────────────────────────────────
 router.post("/contact", authenticate, sendMessage);

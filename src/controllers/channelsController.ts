@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import telegramService from "../services/telegram";
-import { buildSearchFields } from "../utils/search";
+import { buildArtistSearchFields, buildSearchFields, buildTitleSearchFields } from "../utils/search";
 import { normalizeChannelInput } from "../utils/channelInput";
 
 // ── GET /api/channels ──────────────────────────────────────────
@@ -329,6 +329,10 @@ export async function _syncInBackground(
           file.title,
           file.artist,
         );
+        const { searchWords: titleWords, searchPrefixes: titlePrefixes } =
+          buildTitleSearchFields(file.title);
+        const { searchWords: artistWords, searchPrefixes: artistPrefixes } =
+          buildArtistSearchFields(file.artist);
         return {
           updateOne: {
             filter: { channelUsername: username, messageId: file.messageId },
@@ -346,6 +350,10 @@ export async function _syncInBackground(
                 thumbnail: file.thumbnail || null,
                 searchWords,
                 searchPrefixes,
+                titleWords,
+                titlePrefixes,
+                artistWords,
+                artistPrefixes,
               },
             },
             upsert: true,
