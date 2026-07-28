@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import { buildSearchQuery } from "../utils/search";
+import { buildArtistSearchQuery, buildSearchQuery, buildTitleSearchQuery } from "../utils/search";
 import {
   signThumbnailUrl,
   verifyThumbnailToken,
@@ -50,6 +50,7 @@ export const getSongs = async (
       sortBy,
       channelUsername,
       cursor,
+      searchField,
     } = req.query;
     const db = mongoose.connection.db;
     const pageNum = Math.max(1, parseInt(page as string));
@@ -58,7 +59,7 @@ export const getSongs = async (
 
     const query: Record<string, any> = {};
 
-if (channelUsername) {
+    if (channelUsername) {
       const channelExists = await db.collection("channels").findOne({
         channelUsername: channelUsername,
       });
@@ -93,7 +94,12 @@ if (channelUsername) {
     let hasSearch = false;
     if (typeof rawSearch === "string" && rawSearch.trim()) {
       hasSearch = true;
-      const { clauses } = buildSearchQuery(rawSearch);
+      const { clauses } =
+        searchField === "artist"
+          ? buildArtistSearchQuery(rawSearch)
+          : searchField === "title"
+            ? buildTitleSearchQuery(rawSearch)
+            : buildSearchQuery(rawSearch);
       if (clauses.length > 0) {
         query.$and = clauses;
       }
@@ -136,7 +142,6 @@ if (channelUsername) {
       typeof cursor === "string" && cursor.trim() ? decodeCursor(cursor) : null;
 
     if (!rawCursor && pageNum > 1) {
-
       return res.status(400).json({
         success: false,
         message:
