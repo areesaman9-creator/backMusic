@@ -89,6 +89,7 @@ async function createIndexes() {
     );
 
 
+  // user_channels (per-user mapping)
   await db
     .collection("user_channels")
     .createIndex(
