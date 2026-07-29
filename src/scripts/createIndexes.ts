@@ -239,6 +239,23 @@ async function createIndexes() {
       { unique: true, name: "user_deleted_defaults_unique", background: true },
     );
 
+    /* ─────────────────────────────────────────────
+     logs  —  TTL auto-cleanup
+  ───────────────────────────────────────────── */
+  await db
+    .collection("logs")
+    .createIndex(
+      { createdAt: 1 },
+      { expireAfterSeconds: 60 * 60 * 24 * 14, name: "logs_ttl", background: true },
+    );
+
+  await db
+    .collection("logs")
+    .createIndex(
+      { level: 1, createdAt: -1 },
+      { name: "logs_level_date", background: true },
+    );
+
   /* ─────────────────────────────────────────────
      Summary
   ───────────────────────────────────────────── */

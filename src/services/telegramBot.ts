@@ -9,6 +9,7 @@ import {
   buildSearchFields,
   buildTitleSearchFields,
 } from "../utils/search";
+import { logger } from "../utils/logger";
 
 function escapeMarkdown(text?: string | null): string {
   if (!text) return "";
@@ -119,7 +120,11 @@ bot.onText(/^\/start(?:\s+(.+))?$/, async (msg, match) => {
       { parse_mode: "Markdown", reply_markup: mainMenuKeyboard() },
     );
   } catch (err) {
-    console.error("Telegram auth failed:", err.response?.data || err.message);
+    logger.error("Telegram auth failed", {
+      telegramId,
+      telegramUsername,
+      error: err.response?.data || err.message,
+    });
     await bot.sendMessage(
       chatId,
       `❌ *Authentication Failed*\n\nWe were unable to complete your authentication.\nPlease try again in a few moments.`,
@@ -260,6 +265,7 @@ bot.onText(/^(\/updateusername|update username)$/i, async (msg) => {
 async function _handleAudioMessage(msg: TelegramBot.Message) {
   const chatId = msg.chat.id;
   const telegramId = msg.from!.id.toString();
+  const telegramUsername = msg.from.username || "";
   const db = mongoose.connection.db;
 
   const connection = await db
@@ -300,7 +306,11 @@ async function _handleAudioMessage(msg: TelegramBot.Message) {
     storageMessageId = forwarded.message_id;
     storageChannelUsername = storageChannel.replace("@", "");
   } catch (err: any) {
-    console.error("Failed to forward to storage channel:", err.message);
+    logger.error("Failed to forward to storage channel:", {
+      telegramId,
+      telegramUsername,
+      error: err.response?.data || err.message,
+    });
     return bot.sendMessage(
       chatId,
       "❌ Failed to process your file. Please try again.",
@@ -385,7 +395,7 @@ bot.on("document", async (msg) => {
 });
 
 bot.on("polling_error", (err) => {
-  console.error("❌ Bot polling error:", err.message);
+  logger.error("❌ Bot polling error:", err.message.toString);
 });
 
 // ── Edit-in-place helper ─────────────────────────────────────────
@@ -572,7 +582,10 @@ async function sendAccountInfo(
       },
     });
   } catch (err) {
-    console.error("sendAccountInfo error:", err);
+    logger.error("sendAccountInfo error:", {
+      telegramId,
+      error: err.response?.data || err,
+    });
     await sendOrEdit(
       chatId,
       messageId,
@@ -836,7 +849,11 @@ bot.on("callback_query", async (query) => {
     }
     await bot.answerCallbackQuery(query.id);
   } catch (err) {
-    console.error("callback_query error:", err);
+    logger.error("callback_query error:", {
+      telegramId,
+      telegramUsername,
+      error: err.response?.data || err,
+    });
     await bot
       .answerCallbackQuery(query.id, {
         text: "Something went wrong. Please try again.",
