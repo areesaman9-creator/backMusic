@@ -895,4 +895,45 @@ export async function broadcastMessage(
   return { sent, failed };
 }
 
+export async function notifyAdminNewContactMessage(payload: {
+  name?: string;
+  telegramUsername?: string | null;
+  telegramId?: string | null;
+  message: string;
+}): Promise<void> {
+  try {
+    const db = mongoose.connection.db;
+    const admin = await db
+      .collection("users")
+      .findOne(
+        { telegramUsername: "es_saman" },
+        { projection: { telegramId: 1 } },
+      );
+
+    if (!admin?.telegramId) {
+      logger.warn(
+        "notifyAdminNewContactMessage: admin (es_saman) not found or has no telegramId",
+      );
+      return;
+    }
+
+    const senderLabel = payload.telegramUsername
+      ? `@${escapeMarkdown(payload.telegramUsername)}`
+      : payload.telegramId
+        ? `tg:${payload.telegramId}`
+        : "Unknown user";
+
+    const text =
+      `📬 *New Contact Message*\n\n` +
+      `👤 ${escapeMarkdown(payload.name || "—")}  (${senderLabel})\n\n` +
+      `${escapeMarkdown(payload.message)}`;
+
+    await bot.sendMessage(admin.telegramId, text, { parse_mode: "Markdown" });
+  } catch (err: any) {
+    logger.error("Failed to notify admin of contact message", {
+      error: err.response?.data || err.message,
+    });
+  }
+}
+
 export default bot;

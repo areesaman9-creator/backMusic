@@ -88,7 +88,6 @@ async function createIndexes() {
       { name: "bot_songs_user_date", background: true },
     );
 
-
   // user_channels (per-user mapping)
   await db
     .collection("user_channels")
@@ -238,15 +237,33 @@ async function createIndexes() {
       { unique: true, name: "user_deleted_defaults_unique", background: true },
     );
 
-    /* ─────────────────────────────────────────────
+  /* ─────────────────────────────────────────────
      logs  —  TTL auto-cleanup
   ───────────────────────────────────────────── */
-  await db
-    .collection("logs")
-    .createIndex(
-      { createdAt: 1 },
-      { expireAfterSeconds: 60 * 60 * 24 * 14, name: "logs_ttl", background: true },
-    );
+  const LOGS_TTL_SECONDS = 60 * 60 * 24 * 3; 
+
+  try {
+    await db
+      .collection("logs")
+      .createIndex(
+        { createdAt: 1 },
+        {
+          expireAfterSeconds: LOGS_TTL_SECONDS,
+          name: "logs_ttl",
+          background: true,
+        },
+      );
+  } catch (err: any) {
+    if (err.codeName === "IndexOptionsConflict" || err.code === 85) {
+      await db.command({
+        collMod: "logs",
+        index: { name: "logs_ttl", expireAfterSeconds: LOGS_TTL_SECONDS },
+      });
+      console.log("✅ logs_ttl updated to 3 days via collMod");
+    } else {
+      throw err;
+    }
+  }
 
   await db
     .collection("logs")

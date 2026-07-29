@@ -1,6 +1,7 @@
 // src/controllers/contactController.ts
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
+import { notifyAdminNewContactMessage } from "../services/telegramBot";
 
 // ── POST /api/contact ──────────────────────────────────────────
 export const sendMessage = async (
@@ -36,6 +37,13 @@ export const sendMessage = async (
       createdAt: new Date(),
       read: false,
     });
+
+    notifyAdminNewContactMessage({
+      name: (name || "").toString().trim(),
+      telegramUsername: senderUser?.telegramUsername || null,
+      telegramId: senderUser?.telegramId || null,
+      message: message.toString().trim(),
+    }).catch(() => {});
 
     res.status(201).json({ success: true, msg: "Message sent" });
   } catch (error) {
