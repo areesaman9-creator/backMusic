@@ -10,6 +10,7 @@ export const searchUsersGlobal = async (
   next: NextFunction,
 ) => {
   try {
+    const userId = (req as any).user.id.toString();
     const q = ((req.query.q as string) || "").trim();
     if (q.length < 2) return res.json({ success: true, data: [] });
     const db = mongoose.connection.db;
@@ -220,13 +221,14 @@ export const searchSongsByTitle = async (
   }
 };
 
-// ── GET /api/search/artists?q=... (گروه‌بندی بر اساس چنل) ─────────
+// ── GET /api/search/artists?q= ─────────
 export const searchArtists = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
+    const userId = (req as any).user.id.toString();
     const q = ((req.query.q as string) || "").trim();
     if (!q) return res.json({ success: true, data: [] });
 
@@ -268,10 +270,10 @@ export const searchArtists = async (
     const grouped = new Map<string, any[]>();
     for (const s of songs) {
       const list = grouped.get(s.channelUsername) || [];
-      list.push({
+    list.push({
         ...s,
         channelName: nameMap.get(s.channelUsername) || s.channelUsername,
-        thumbnail: signThumbnailUrl(s._id.toString()),
+        thumbnail: signThumbnailUrl(s._id.toString(), userId),
       });
       grouped.set(s.channelUsername, list);
     }
@@ -328,6 +330,7 @@ export const searchChannelsGlobal = async (
   next: NextFunction,
 ) => {
   try {
+    const userId = (req as any).user.id.toString();
     const q = ((req.query.q as string) || "").trim();
     if (!q) return res.json({ success: true, data: [] });
     const db = mongoose.connection.db;

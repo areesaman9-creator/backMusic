@@ -89,7 +89,6 @@ export const getBotSongs = async (
       db.collection("bot_songs").countDocuments({ userId }),
     ]);
 
-    // فرمت رو مثل songs معمولی کن تا Flutter بتونه Song.fromJson بزنه
     const formatted = songs.map((s) => ({
       _id: s._id.toString(),
       channelDbId: s._id.toString(),
@@ -100,7 +99,7 @@ export const getBotSongs = async (
       duration: s.duration,
       fileId: s.fileId,
       fileSize: s.fileSize,
-      thumbnail: signThumbnailUrl(s._id.toString()),
+      thumbnail: signThumbnailUrl(s._id.toString(), userId),
       messageId: s.messageId,
       isFavorite: false,
     }));

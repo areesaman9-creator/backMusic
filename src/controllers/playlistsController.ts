@@ -281,7 +281,7 @@ export const getPlaylistSongs = async (
       .filter(Boolean)
       .map((s: any) => ({
         ...s,
-        thumbnail: signThumbnailUrl(s._id.toString()),
+        thumbnail: signThumbnailUrl(s._id.toString(), userId),
       }));
 
     res.json({

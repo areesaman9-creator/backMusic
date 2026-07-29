@@ -124,7 +124,7 @@ export const getSongs = async (
       const total = result.meta[0]?.total ?? 0;
       const songs = (result.data ?? []).map((s: any) => ({
         ...s,
-        thumbnail: signThumbnailUrl(s._id.toString()),
+        thumbnail: signThumbnailUrl(s._id.toString(), userIdStr),
       }));
       const totalPages = Math.ceil(total / limitNum);
 
@@ -254,7 +254,7 @@ export const getSongs = async (
 
     const songs = pageItems.map(({ _sortDate, ...rest }: any) => ({
       ...rest,
-      thumbnail: signThumbnailUrl(rest._id.toString()),
+      thumbnail: signThumbnailUrl(rest._id.toString(), userIdStr),
     }));
 
     const total = songsTotal + botTotal;
@@ -312,7 +312,7 @@ export const getSongById = async (
 
     res.json({
       success: true,
-      data: { ...song, thumbnail: signThumbnailUrl(song._id.toString()) },
+      data: { ...song, thumbnail: signThumbnailUrl(song._id.toString(), userId) },
     });
   } catch (error) {
     next(error);
@@ -382,7 +382,7 @@ export const getSongsByIds = async (
       .filter(Boolean)
       .map((s: any) => ({
         ...s,
-        thumbnail: signThumbnailUrl(s._id.toString()),
+        thumbnail: signThumbnailUrl(s._id.toString(), userId),
       }));
     res.json({ success: true, data: ordered });
   } catch (error) {
@@ -390,7 +390,7 @@ export const getSongsByIds = async (
   }
 };
 
-// ── In-memory cache تامبنیل — تا هر request مجبور نشه از تلگرام دانلود کنه ──
+// ── In-memory cache ──
 const THUMB_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const THUMB_CACHE_MAX = 2000;
 const thumbCache = new Map<string, { buffer: Buffer; expiresAt: number }>();
@@ -413,7 +413,6 @@ function setCachedThumb(id: string, buffer: Buffer) {
 }
 
 // ── GET /api/songs/:id/thumbnail?exp=...&sig=... ─────────────────
-// عمداً authenticate نداره — امضای HMAC خودش auth رو تأمین می‌کنه
 export const getSongThumbnail = async (
   req: Request,
   res: Response,
@@ -423,11 +422,16 @@ export const getSongThumbnail = async (
     const { id } = req.params;
     const exp = parseInt((req.query.exp as string) || "0", 10);
     const sig = (req.query.sig as string) || "";
+    const uid = (req.query.uid as string) || "";
 
-    if (!verifyThumbnailToken(id, exp, sig)) {
+    if (!verifyThumbnailToken(id, exp, sig, uid)) {
       return res
         .status(403)
         .json({ success: false, message: "Invalid or expired link" });
+    }
+
+    if (uid) {
+      (req as any).user = { _id: uid };
     }
 
     const cached = getCachedThumb(id);

@@ -52,7 +52,7 @@ export const getFavorites = async (
       .toArray();
     const data = songs.map((s: any) => ({
       ...s,
-      thumbnail: signThumbnailUrl(s._id.toString()),
+      thumbnail: signThumbnailUrl(s._id.toString(), userId),
     }));
     res.json({ success: true, data });
   } catch (error) {
