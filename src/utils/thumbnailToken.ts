@@ -15,15 +15,11 @@ function dayBoundaryExp(): number {
   return Math.ceil(Date.now() / DAY_MS) * DAY_MS + DAY_MS;
 }
 
-export function signThumbnailUrl(
-  songId: string,
-  userId?: string | null,
-): string {
+export function signThumbnailUrl(songId: string, userId?: string): string {
   const exp = dayBoundaryExp();
   const uid = userId || "";
   const sig = sign(songId, exp, uid);
-  const uidParam = uid ? `&uid=${encodeURIComponent(uid)}` : "";
-  return `${PUBLIC_API_URL}/songs/${songId}/thumbnail?exp=${exp}&sig=${sig}${uidParam}`;
+  return `${PUBLIC_API_URL}/songs/${songId}/thumbnail?exp=${exp}&sig=${sig}${uid ? `&uid=${uid}` : ""}`;
 }
 
 export function verifyThumbnailToken(

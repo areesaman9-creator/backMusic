@@ -1,6 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import { buildArtistSearchQuery, buildSearchQuery, buildTitleSearchQuery } from "../utils/search";
+import {
+  buildArtistSearchQuery,
+  buildSearchQuery,
+  buildTitleSearchQuery,
+} from "../utils/search";
 import {
   signThumbnailUrl,
   verifyThumbnailToken,
@@ -32,6 +36,25 @@ function decodeCursor(raw: string): MergeCursor | null {
     };
   } catch {
     return null;
+  }
+}
+
+async function _describeThumbnailRequester(
+  uid: string,
+  db: any,
+): Promise<string> {
+  if (!uid) return "unknown (no uid)";
+  try {
+    const user = await db
+      .collection("users")
+      .findOne(
+        { _id: new mongoose.Types.ObjectId(uid) },
+        { projection: { telegramUsername: 1, telegramId: 1 } },
+      );
+    if (!user) return `uid=${uid} (user not found)`;
+    return `@${user.telegramUsername || "—"} (tgId:${user.telegramId || "—"}, uid:${uid})`;
+  } catch {
+    return `uid=${uid} (invalid)`;
   }
 }
 
@@ -312,7 +335,10 @@ export const getSongById = async (
 
     res.json({
       success: true,
-      data: { ...song, thumbnail: signThumbnailUrl(song._id.toString(), userId) },
+      data: {
+        ...song,
+        thumbnail: signThumbnailUrl(song._id.toString(), userId),
+      },
     });
   } catch (error) {
     next(error);
@@ -467,10 +493,14 @@ export const getSongThumbnail = async (
           { _id: objId },
           { projection: { channelUsername: 1, messageId: 1, userId: 1 } },
         );
-      if (!doc)
+      if (!doc) {
+        console.warn(
+          `⚠️ [thumbnail 404] songId=${id} requestedBy=${await _describeThumbnailRequester(uid, db)}`,
+        );
         return res
           .status(404)
           .json({ success: false, message: "Song not found" });
+      }
       botUserId = (doc as any).userId;
     }
 

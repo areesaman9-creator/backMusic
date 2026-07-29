@@ -157,6 +157,7 @@ export const searchSongsByTitle = async (
   next: NextFunction,
 ) => {
   try {
+    const userId = (req as any).user.id.toString();
     const q = ((req.query.q as string) || "").trim();
     const page = Math.max(1, parseInt((req.query.page as string) || "1"));
     const limit = Math.min(100, parseInt((req.query.limit as string) || "30"));
@@ -206,7 +207,7 @@ export const searchSongsByTitle = async (
     const data = songs.map((s: any) => ({
       ...s,
       channelName: nameMap.get(s.channelUsername) || s.channelUsername,
-      thumbnail: signThumbnailUrl(s._id.toString()),
+      thumbnail: signThumbnailUrl(s._id.toString(), userId),
     }));
 
     res.json({
@@ -220,6 +221,8 @@ export const searchSongsByTitle = async (
     next(error);
   }
 };
+
+
 
 // ── GET /api/search/artists?q= ─────────
 export const searchArtists = async (
