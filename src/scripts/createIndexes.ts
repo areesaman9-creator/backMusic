@@ -260,7 +260,6 @@ async function createIndexes() {
      Summary
   ───────────────────────────────────────────── */
 
-  // Print index report
   const collections = [
     "channels",
     "songs",
