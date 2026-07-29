@@ -926,7 +926,7 @@ export async function notifyAdminNewContactMessage(payload: {
     const text =
       `📬 *New Contact Message*\n\n` +
       `👤 ${escapeMarkdown(payload.name || "—")}  (${senderLabel})\n\n` +
-      `${escapeMarkdown(payload.message)}`;
+      `🔔${escapeMarkdown(payload.message)}`;
 
     await bot.sendMessage(admin.telegramId, text, { parse_mode: "Markdown" });
   } catch (err: any) {
