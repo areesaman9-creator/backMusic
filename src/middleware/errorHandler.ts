@@ -38,7 +38,6 @@ export const errorHandler = (
   logger.error(message, {
     telegramId: user?.telegramId ?? null,
     telegramUsername: user?.telegramUsername ?? null,
-    userId: user?._id?.toString() ?? null,
     method: req.method,
     path: req.originalUrl,
     statusCode,

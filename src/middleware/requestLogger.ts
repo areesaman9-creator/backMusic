@@ -10,7 +10,6 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
     logger.info(`${req.method} ${req.originalUrl} ${res.statusCode}`, {
       telegramId: user?.telegramId ?? null,
       telegramUsername: user?.telegramUsername ?? null,
-      userId: user?._id?.toString() ?? null,
       method: req.method,
       path: req.originalUrl,
       statusCode: res.statusCode,
