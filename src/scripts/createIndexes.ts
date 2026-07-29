@@ -88,7 +88,6 @@ async function createIndexes() {
       { name: "bot_songs_user_date", background: true },
     );
 
-  // user_channels (per-user mapping)
 
   // user_channels (per-user mapping)
   await db
