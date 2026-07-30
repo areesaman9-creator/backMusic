@@ -458,6 +458,19 @@ export const getSongThumbnail = async (
 
     if (uid) {
       (req as any).user = { _id: uid };
+      try {
+        const uidUser = await mongoose.connection.db
+          .collection("users")
+          .findOne(
+            { _id: new mongoose.Types.ObjectId(uid) },
+            { projection: { telegramId: 1, telegramUsername: 1 } },
+          );
+        if (uidUser) {
+          (req as any).user.telegramId = uidUser.telegramId ?? null;
+          (req as any).user.telegramUsername = uidUser.telegramUsername ?? null;
+        }
+      } catch {
+      }
     }
 
     const cached = getCachedThumb(id);
