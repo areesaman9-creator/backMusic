@@ -394,8 +394,11 @@ bot.on("document", async (msg) => {
   }
 });
 
-bot.on("polling_error", (err) => {
-  logger.error("❌ Bot polling error:", err.message.toString);
+bot.on("polling_error", (err: any) => {
+  logger.error(`❌ Bot polling error: ${err.message}`, {
+    code: err.code,
+    stack: err.stack,
+  });
 });
 
 // ── Edit-in-place helper ─────────────────────────────────────────

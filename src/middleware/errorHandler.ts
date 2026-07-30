@@ -52,7 +52,7 @@ export const errorHandler = (
 };
 
 export const notFound = (req: Request, res: Response, next: NextFunction) => {
-  const error = new Error(`Not Found - ${req.originalUrl}`);
-  res.status(404);
+  const error: any = new Error(`Not Found - ${req.originalUrl}`);
+  error.statusCode = 404;
   next(error);
 };
