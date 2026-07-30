@@ -13,7 +13,7 @@ export interface IUser extends Document {
   refreshToken?: string;
   subscriptionPlan: string | null;
   subscriptionExpiresAt: Date | null;
-  reservedDaysAfterPromo: { type: Number, default: null },
+  reservedDaysAfterPromo: number | null;
   role: string;
   comparePassword(candidatePassword: string): Promise<boolean>;
   toPublicJSON(): object;
@@ -46,6 +46,7 @@ const userSchema = new Schema<IUser>(
     refreshToken: { type: String, select: false },
     subscriptionPlan: { type: String, default: null },
     subscriptionExpiresAt: { type: Date, default: null },
+    reservedDaysAfterPromo: { type: Number, default: null },
     isPrivate: { type: Boolean, default: false },
   },
   { timestamps: true },
