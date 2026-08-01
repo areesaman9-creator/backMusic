@@ -11,34 +11,6 @@ import {
 } from "../utils/thumbnailToken";
 import telegramService from "../services/telegram";
 
-// ── Cursor helpers ────────────
-
-interface MergeCursor {
-  s: string | null;
-  sId: string | null;
-  b: string | null;
-  bId: string | null;
-}
-
-function encodeCursor(c: MergeCursor): string {
-  return Buffer.from(JSON.stringify(c)).toString("base64");
-}
-
-function decodeCursor(raw: string): MergeCursor | null {
-  try {
-    const parsed = JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
-    if (typeof parsed !== "object" || parsed === null) return null;
-    return {
-      s: parsed.s ?? null,
-      sId: parsed.sId ?? null,
-      b: parsed.b ?? null,
-      bId: parsed.bId ?? null,
-    };
-  } catch {
-    return null;
-  }
-}
-
 async function _describeThumbnailRequester(
   uid: string,
   db: any,

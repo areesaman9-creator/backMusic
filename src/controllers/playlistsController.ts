@@ -303,6 +303,40 @@ export const getPlaylistSongs = async (
   }
 };
 
+// ── GET /api/playlists/containing?songIds=a,b,c ──────────────────
+export const getPlaylistsContainingSongs = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const userId = (req as any).user.id.toString();
+    const songIdsParam = (req.query.songIds as string) || "";
+    const songIds = songIdsParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (songIds.length === 0) return res.json({ success: true, data: [] });
+
+    const db = mongoose.connection.db;
+    const playlists = await db
+      .collection("user_playlists")
+      .find(
+        { userIds: userId, songIds: { $all: songIds } },
+        { projection: { _id: 1 } },
+      )
+      .toArray();
+
+    res.json({
+      success: true,
+      data: playlists.map((p: any) => p._id.toString()),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ── POST /api/playlists/:id/songs ──────────────────────────────
 export const addSongToPlaylist = async (
   req: Request,
