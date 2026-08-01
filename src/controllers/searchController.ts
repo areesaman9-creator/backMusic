@@ -20,7 +20,10 @@ export const searchUsersGlobal = async (
       .collection("users")
       .find({
         isActive: true,
-        telegramUsername: { $regex: cleanQuery, $options: "i" },
+        $or: [
+          { telegramUsername: { $regex: cleanQuery, $options: "i" } },
+          { telegramId: { $regex: cleanQuery, $options: "i" } },
+        ],
       })
       .project({ name: 1, telegramUsername: 1, telegramId: 1, isPrivate: 1 })
       .limit(20)
@@ -57,19 +60,17 @@ export const getUserPublicProfile = async (
       return res.status(400).json({ success: false, msg: "Invalid user id" });
     }
 
-    const user = await db
-      .collection("users")
-      .findOne(
-        { _id: objId },
-        {
-          projection: {
-            name: 1,
-            telegramUsername: 1,
-            telegramId: 1,
-            isPrivate: 1,
-          },
+    const user = await db.collection("users").findOne(
+      { _id: objId },
+      {
+        projection: {
+          name: 1,
+          telegramUsername: 1,
+          telegramId: 1,
+          isPrivate: 1,
         },
-      );
+      },
+    );
     if (!user)
       return res.status(404).json({ success: false, msg: "User not found" });
 
@@ -222,8 +223,6 @@ export const searchSongsByTitle = async (
   }
 };
 
-
-
 // ── GET /api/search/artists?q= ─────────
 export const searchArtists = async (
   req: Request,
@@ -273,7 +272,7 @@ export const searchArtists = async (
     const grouped = new Map<string, any[]>();
     for (const s of songs) {
       const list = grouped.get(s.channelUsername) || [];
-    list.push({
+      list.push({
         ...s,
         channelName: nameMap.get(s.channelUsername) || s.channelUsername,
         thumbnail: signThumbnailUrl(s._id.toString(), userId),
