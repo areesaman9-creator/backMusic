@@ -2,6 +2,7 @@ import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import mongoose from "mongoose";
+import { telegramQueue, withFloodWaitRetry } from "../utils/telegramQueue";
 
 const API_ID = parseInt(process.env.TELEGRAM_API_ID as string, 10);
 const API_HASH = process.env.TELEGRAM_API_HASH as string;
@@ -58,7 +59,9 @@ class TelegramService {
 
   private async resolveEntity(usernameOrLink: string): Promise<any> {
     if (!this.isInviteLink(usernameOrLink)) {
-      return this.client!.getEntity(usernameOrLink);
+      return withFloodWaitRetry(() =>
+        telegramQueue.enqueue(() => this.client!.getEntity(usernameOrLink)),
+      );
     }
 
     const hash = this.extractInviteHash(usernameOrLink);
@@ -66,8 +69,10 @@ class TelegramService {
     const cached = this._resolvedEntityCache.get(hash);
     if (cached) return cached;
 
-    const invite: any = await this.client!.invoke(
-      new Api.messages.CheckChatInvite({ hash }),
+    const invite: any = await withFloodWaitRetry(() =>
+      telegramQueue.enqueue(() =>
+        this.client!.invoke(new Api.messages.CheckChatInvite({ hash })),
+      ),
     );
 
     if (invite.chat) {
@@ -123,9 +128,11 @@ class TelegramService {
           fileReference: doc.fileReference,
           thumbSize: bestThumb.type || "x",
         });
-        const buffer = await this.client!.downloadFile(thumbLocation, {
-          dcId: doc.dcId,
-        });
+        const buffer = await withFloodWaitRetry(() =>
+          telegramQueue.enqueue(() =>
+            this.client!.downloadFile(thumbLocation, { dcId: doc.dcId }),
+          ),
+        );
         if (buffer && buffer.length > 0) {
           return `data:image/jpeg;base64,${buffer.toString("base64")}`;
         }
@@ -172,11 +179,15 @@ class TelegramService {
       let totalEstimate = 0;
 
       while (!reachedEnd) {
-        const messages = await this.client!.getMessages(entity, {
-          limit: 100,
-          offsetId,
-          filter: new Api.InputMessagesFilterMusic(),
-        });
+        const messages = await withFloodWaitRetry(() =>
+          telegramQueue.enqueue(() =>
+            this.client!.getMessages(entity, {
+              limit: 100,
+              offsetId,
+              filter: new Api.InputMessagesFilterMusic(),
+            }),
+          ),
+        );
 
         if (totalEstimate === 0 && (messages as any).total) {
           totalEstimate = (messages as any).total;
@@ -262,13 +273,18 @@ class TelegramService {
         return { success: false, error: "File not found" };
       }
 
-      const buffer = (await this.client!.downloadMedia(message[0].media, {
-        progressCallback: (downloaded: any, total: any) => {
-          const d = Number(downloaded),
-            t = Number(total);
-          if (t > 0 && onProgress) onProgress(Math.round((d / t) * 100), d, t);
-        },
-      })) as Buffer;
+      const buffer = (await withFloodWaitRetry(() =>
+        telegramQueue.enqueue(() =>
+          this.client!.downloadMedia(message[0].media, {
+            progressCallback: (downloaded: any, total: any) => {
+              const d = Number(downloaded),
+                t = Number(total);
+              if (t > 0 && onProgress)
+                onProgress(Math.round((d / t) * 100), d, t);
+            },
+          }),
+        ),
+      )) as Buffer;
 
       return { success: true, buffer };
     } catch (error: any) {
