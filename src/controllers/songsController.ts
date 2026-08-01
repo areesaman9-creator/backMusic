@@ -100,7 +100,7 @@ export const getSongs = async (
     } else {
       const userChannels = await db
         .collection("user_channels")
-        .find({ userId: userIdStr, isDefault: { $ne: true } })
+        .find({ userId: userIdStr })
         .project({ channelUsername: 1 })
         .toArray();
 
@@ -128,7 +128,9 @@ export const getSongs = async (
       }
     }
 
-    const includeBotSongs = false;
+    // در حالت هوم‌اسکرین (بدون channelUsername و بدون سرچ) آهنگ‌های
+    // Bot Inbox هم با اتحادِ کالکشن bot_songs داخل نتیجه ادغام می‌شن.
+    const includeBotSongs = !channelUsername && !hasSearch;
 
     if (!includeBotSongs) {
       const [result] = await db
@@ -161,126 +163,49 @@ export const getSongs = async (
       });
     }
 
-    const rawCursor =
-      typeof cursor === "string" && cursor.trim() ? decodeCursor(cursor) : null;
-
-    if (!rawCursor && pageNum > 1) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Pagination beyond page 1 for this listing requires the 'cursor' from the previous response.",
-      });
-    }
-
-    const songFilter: Record<string, any> = { ...query };
-    if (rawCursor?.s) {
-      songFilter.$or = [
-        { messageDate: { $lt: new Date(rawCursor.s) } },
+    const [mergedResult] = await db
+      .collection("songs")
+      .aggregate([
+        { $match: query },
         {
-          messageDate: new Date(rawCursor.s),
-          _id: { $lt: new mongoose.Types.ObjectId(rawCursor.sId!) },
+          $unionWith: {
+            coll: "bot_songs",
+            pipeline: [
+              { $match: { userId: userIdStr } },
+              {
+                $project: {
+                  _id: 1,
+                  channelDbId: { $toString: "$_id" },
+                  channelUsername: 1,
+                  channelName: { $literal: "Bot Inbox" },
+                  title: 1,
+                  artist: 1,
+                  duration: 1,
+                  fileId: 1,
+                  fileSize: 1,
+                  mimeType: 1,
+                  thumbnail: 1,
+                  messageId: 1,
+                  messageDate: "$receivedAt",
+                },
+              },
+            ],
+          },
         },
-      ];
-    }
-
-    const botFilter: Record<string, any> = { userId: userIdStr };
-    if (rawCursor?.b) {
-      botFilter.$or = [
-        { receivedAt: { $lt: new Date(rawCursor.b) } },
         {
-          receivedAt: new Date(rawCursor.b),
-          _id: { $lt: new mongoose.Types.ObjectId(rawCursor.bId!) },
+          $facet: {
+            meta: [{ $count: "total" }],
+            data: [{ $sort: sort }, { $skip: skip }, { $limit: limitNum }],
+          },
         },
-      ];
-    }
+      ])
+      .toArray();
 
-    const windowSize = limitNum + 1;
-
-    const [songWindow, botWindow, songsTotal, botTotal] = await Promise.all([
-      db
-        .collection("songs")
-        .find(songFilter)
-        .sort({ messageDate: -1, _id: -1 })
-        .limit(windowSize)
-        .toArray(),
-      db
-        .collection("bot_songs")
-        .find(botFilter)
-        .sort({ receivedAt: -1, _id: -1 })
-        .limit(windowSize)
-        .toArray(),
-      db.collection("songs").countDocuments(query),
-      db.collection("bot_songs").countDocuments({ userId: userIdStr }),
-    ]);
-
-    const normalizedSongs = songWindow.map((s) => ({
+    const total = mergedResult.meta[0]?.total ?? 0;
+    const songs = (mergedResult.data ?? []).map((s: any) => ({
       ...s,
-      _sortDate: s.messageDate,
+      thumbnail: signThumbnailUrl(s._id.toString(), userIdStr),
     }));
-    const normalizedBot = botWindow.map((s) => ({
-      _id: s._id,
-      channelDbId: s._id.toString(),
-      channelUsername: s.channelUsername,
-      channelName: "Bot Inbox",
-      title: s.title,
-      artist: s.artist,
-      duration: s.duration,
-      fileId: s.fileId,
-      fileSize: s.fileSize,
-      mimeType: s.mimeType,
-      thumbnail: s.thumbnail,
-      messageId: s.messageId,
-      _sortDate: s.receivedAt,
-    }));
-
-    let i = 0;
-    let j = 0;
-    const pageItems: any[] = [];
-    while (
-      pageItems.length < limitNum &&
-      (i < normalizedSongs.length || j < normalizedBot.length)
-    ) {
-      const a = normalizedSongs[i];
-      const b = normalizedBot[j];
-      let takeFromSongs: boolean;
-      if (a === undefined) takeFromSongs = false;
-      else if (b === undefined) takeFromSongs = true;
-      else
-        takeFromSongs =
-          new Date(a._sortDate).getTime() >= new Date(b._sortDate).getTime();
-
-      if (takeFromSongs) {
-        pageItems.push(a);
-        i++;
-      } else {
-        pageItems.push(b);
-        j++;
-      }
-    }
-
-    const hasMore = i < normalizedSongs.length || j < normalizedBot.length;
-    const lastSong = i > 0 ? normalizedSongs[i - 1] : null;
-    const lastBot = j > 0 ? normalizedBot[j - 1] : null;
-
-    const nextCursor = hasMore
-      ? encodeCursor({
-          s: lastSong
-            ? new Date(lastSong._sortDate).toISOString()
-            : (rawCursor?.s ?? null),
-          sId: lastSong ? lastSong._id.toString() : (rawCursor?.sId ?? null),
-          b: lastBot
-            ? new Date(lastBot._sortDate).toISOString()
-            : (rawCursor?.b ?? null),
-          bId: lastBot ? lastBot._id.toString() : (rawCursor?.bId ?? null),
-        })
-      : null;
-
-    const songs = pageItems.map(({ _sortDate, ...rest }: any) => ({
-      ...rest,
-      thumbnail: signThumbnailUrl(rest._id.toString(), userIdStr),
-    }));
-
-    const total = songsTotal + botTotal;
     const totalPages = Math.ceil(total / limitNum);
 
     res.json({
@@ -289,8 +214,7 @@ export const getSongs = async (
       total,
       page: pageNum,
       totalPages,
-      hasMore,
-      nextCursor,
+      hasMore: pageNum < totalPages,
     });
   } catch (error) {
     next(error);
