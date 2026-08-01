@@ -13,9 +13,6 @@ import { requestLogger } from "./middleware/requestLogger";
 
 const app = express();
 
-// MongoDB
-connectDB();
-
 // app.set("trust proxy", true);
 
 // Security
@@ -119,16 +116,28 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 
-const server = app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`🌍 Mode: ${process.env.NODE_ENV || "development"}`);
-  console.log(`❤️  Health: http://localhost:${PORT}/health`);
-  console.log(`📡 API:    http://localhost:${PORT}/api`);
+let server: ReturnType<typeof app.listen>;
+
+connectDB()
+  .then(() => {
+    server = app.listen(PORT, () => {
+      console.log(`\n🚀 Server running on port ${PORT}`);
+      console.log(`🌍 Mode: ${process.env.NODE_ENV || "development"}`);
+      console.log(`❤️  Health: http://localhost:${PORT}/health`);
+      console.log(`📡 API:    http://localhost:${PORT}/api`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ Failed to connect to MongoDB — server not started:", err);
+    process.exit(1);
+  });
+
+process.on("unhandledRejection", (reason: any) => {
+  console.error(`❌ Unhandled Rejection:`, reason);
 });
 
-process.on("unhandledRejection", (err: any) => {
-  console.error(`❌ Unhandled Rejection: ${err.message}`);
-  process.exit(1);
+process.on("uncaughtException", (err: any) => {
+  console.error(`❌ Uncaught Exception:`, err);
 });
 
 // ── Graceful Shutdown ────────────────────────────────────────────
