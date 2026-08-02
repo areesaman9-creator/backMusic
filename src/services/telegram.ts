@@ -1,4 +1,4 @@
-import { TelegramClient } from "telegram";
+import { TelegramClient, utils } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram/tl";
 import mongoose from "mongoose";
@@ -105,7 +105,7 @@ class TelegramService {
     }
   }
 
-  private async getDocumentThumbnail(
+private async getDocumentThumbnail(
     doc: any,
     channelUsername: string,
     messageId: number,
@@ -114,11 +114,29 @@ class TelegramService {
       if (!doc.thumbs || doc.thumbs.length === 0) return null;
 
       let bestThumb = doc.thumbs[doc.thumbs.length - 1];
-      if (
-        bestThumb.className === "PhotoStrippedSize" &&
-        doc.thumbs.length > 1
-      ) {
-        bestThumb = doc.thumbs[doc.thumbs.length - 2];
+
+      // PhotoStrippedSize نیاز به دانلود نداره — بایت‌هاش همون لحظه
+      // داخل پیامه. اگه بین thumbها یه نوع دانلودی (PhotoSize/PhotoCachedSize)
+      // پیدا شد از اون استفاده کن، وگرنه stripped رو خودمون بازسازی می‌کنیم.
+      if (bestThumb.className === "PhotoStrippedSize") {
+        const downloadable = [...doc.thumbs]
+          .reverse()
+          .find(
+            (t: any) =>
+              t.className === "PhotoSize" || t.className === "PhotoCachedSize",
+          );
+
+        if (downloadable) {
+          bestThumb = downloadable;
+        } else {
+          try {
+            const jpg = utils.strippedPhotoToJpg(bestThumb.bytes);
+            return `data:image/jpeg;base64,${jpg.toString("base64")}`;
+          } catch (e: any) {
+            console.warn("strippedPhotoToJpg failed:", e.message);
+            return null;
+          }
+        }
       }
 
       try {
@@ -146,7 +164,6 @@ class TelegramService {
       return null;
     }
   }
-
   async getChannelName(
     channelUsername: string,
     userId?: any,
