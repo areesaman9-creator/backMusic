@@ -106,6 +106,22 @@ class TelegramService {
     }
   }
 
+  private extractStrippedThumbnail(doc: any): string | null {
+    try {
+      if (!doc.thumbs || doc.thumbs.length === 0) return null;
+      const stripped = doc.thumbs.find(
+        (t: any) => t.className === "PhotoStrippedSize",
+      );
+      if (!stripped || typeof utils.strippedPhotoToJpg !== "function") {
+        return null;
+      }
+      const jpg = utils.strippedPhotoToJpg(stripped.bytes);
+      return `data:image/jpeg;base64,${jpg.toString("base64")}`;
+    } catch {
+      return null;
+    }
+  }
+
   private async getDocumentThumbnail(
     doc: any,
     channelUsername: string,
@@ -281,7 +297,7 @@ class TelegramService {
             mimeType: doc.mimeType || "audio/mpeg",
             messageDate: msg.date,
             fileUrl: `https://t.me/${username}/${msg.id}`,
-            thumbnail: null,
+            thumbnail: this.extractStrippedThumbnail(doc),
           });
         }
 

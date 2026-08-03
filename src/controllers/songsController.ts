@@ -121,8 +121,7 @@ export const getSongs = async (
       const total = result.meta[0]?.total ?? 0;
       const songs = (result.data ?? []).map((s: any) => ({
         ...s,
-        thumbnail: signThumbnailUrl(s._id.toString(), userIdStr),
-      }));
+        thumbnail: s.thumbnail || signThumbnailUrl(s._id.toString(), userIdStr),      }));
       const totalPages = Math.ceil(total / limitNum);
 
       return res.json({
@@ -233,8 +232,7 @@ export const getSongById = async (
       success: true,
       data: {
         ...song,
-        thumbnail: signThumbnailUrl(song._id.toString(), userId),
-      },
+        thumbnail: song.thumbnail || signThumbnailUrl(song._id.toString(), userId),      },
     });
   } catch (error) {
     next(error);
@@ -304,8 +302,7 @@ export const getSongsByIds = async (
       .filter(Boolean)
       .map((s: any) => ({
         ...s,
-        thumbnail: signThumbnailUrl(s._id.toString(), userId),
-      }));
+        thumbnail: s.thumbnail || signThumbnailUrl(s._id.toString(), userId),}));
     res.json({ success: true, data: ordered });
   } catch (error) {
     next(error);
