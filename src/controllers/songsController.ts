@@ -365,8 +365,7 @@ export const getSongThumbnail = async (
           (req as any).user.telegramId = uidUser.telegramId ?? null;
           (req as any).user.telegramUsername = uidUser.telegramUsername ?? null;
         }
-      } catch {
-      }
+      } catch {}
     }
 
     const cached = getCachedThumb(id);
@@ -413,10 +412,16 @@ export const getSongThumbnail = async (
       botUserId = (doc as any).userId;
     }
 
+    const requesterUser = (req as any).user;
     const dataUrl = await telegramService.downloadSongThumbnail(
       doc.channelUsername,
       doc.messageId,
       botUserId,
+      {
+        telegramId: requesterUser?.telegramId ?? null,
+        telegramUsername: requesterUser?.telegramUsername ?? null,
+        userId: uid || botUserId || null,
+      },
     );
     if (!dataUrl) {
       return res
